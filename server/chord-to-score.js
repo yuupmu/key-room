@@ -33,7 +33,7 @@ export class ChordError extends Error {
   constructor(message, status = 422) { super(message); this.status = status; }
 }
 function check(condition, message) { if (!condition) throw new ChordError(message); }
-function normalized(value) { return value.trim().replace(/♭/g, 'b').replace(/♯/g, '#').replace(/[−–]/g, '-').replace(/Δ/g, 'M'); }
+function normalized(value) { return value.trim().replace(/♭/g, 'b').replace(/♯/g, '#').replace(/[−–]/g, '-').replace(/Δ/g, 'M').replace(/(m7|-7)-5(?=\/|\(|$)/gi, '$1b5'); }
 function pitchFrom(root, octave, semitones, degree) {
   const index = STEPS.indexOf(root.step) + degree - 1;
   const step = STEPS[index % 7];
@@ -70,7 +70,7 @@ export function parseChord(symbol) {
   return { symbol: symbol.trim(), right, left, tones: right.map(label), bass: label(left) };
 }
 
-export function parseProgression(input) {
+function progressionPieces(input) {
   check(typeof input === 'string' && input.trim() && input.length <= 4000, '코드 진행을 입력해 주세요.');
   const source = input.trim().replace(/([A-G][#b]?)\s+(sus2|sus4|sus|add9)/gi, '$1$2');
   const explicitBars = /[|\n]/.test(source);
@@ -79,8 +79,31 @@ export function parseProgression(input) {
   return pieces.map((piece, index) => {
     const tokens = piece.split(/\s+/).filter(Boolean);
     check(tokens.length >= 1 && tokens.length <= 4, `${index + 1}마디에는 코드 1~4개를 입력해 주세요.`);
-    return tokens.map(parseChord);
+    return tokens;
   });
+}
+
+export function parseProgression(input) {
+  const pieces = progressionPieces(input);
+  return pieces.map((tokens, index) => tokens.map(token => {
+    check(token !== '?', `${index + 1}마디의 ? 코드를 직접 입력해 주세요.`);
+    return parseChord(token);
+  }));
+}
+
+export function reviewExtractedProgression(input) {
+  const pieces = progressionPieces(input);
+  let unknownCount = 0;
+  const progression = pieces.map(tokens => tokens.map(token => {
+    if (token === '?') { unknownCount++; return token; }
+    try { parseChord(token); return token; }
+    catch (error) {
+      if (!(error instanceof ChordError)) throw error;
+      unknownCount++;
+      return '?';
+    }
+  }).join(' ')).join(' | ');
+  return { progression, unknownCount };
 }
 
 function event(pitches, beats) {
@@ -154,7 +177,7 @@ export async function extractChordChart(buffer, mime, { key = process.env.OPENAI
     ? { type: 'input_file', filename: 'chord-chart.pdf', file_data: `data:${mime};base64,${buffer.toString('base64')}` }
     : { type: 'input_image', image_url: `data:${mime};base64,${buffer.toString('base64')}`, detail: 'original' };
   const body = { model: process.env.OPENAI_SCORE_MODEL || 'gpt-5.6-luna', reasoning: { effort: 'high' }, store: false, max_output_tokens: 12000,
-    instructions: 'Read chord symbols in musical reading order. Ignore melody notes and lyrics except to locate chord symbols. Include intro, verse and later systems; do not stop at the first line. Preserve every printed chord change, including slash bass and extensions. Use symbols like Bb, Am7, Dm7, EbM7(#11), Fsus4/C. Convert printed minus after root to minor notation m (A-7 to Am7). If a later symbol is only a slash bass such as /C, carry the preceding chord root and quality forward, e.g. Dm followed by /C becomes Dm/C. If barlines are visible, separate measures with | and put multiple chord symbols in the same measure separated by spaces, no more than four per measure. If barlines are not visible or chord-to-measure alignment is uncertain, put each chord symbol in its own measure separated by |, set barsKnown=false, and explain that timing is assumed. Do not invent chords or timing. If a symbol cannot be read, explain it in warning and leave it out rather than guessing. Return no prose outside JSON.',
+    instructions: 'Read chord symbols in musical reading order. Ignore melody notes and lyrics except to locate chord symbols. Include intro, verse and later systems; do not stop at the first line. Preserve every printed chord change, including slash bass and extensions. Use symbols like Bb, Am7, Dm7, EbM7(#11), Fsus4/C. Convert printed minus after root to minor notation m (A-7 to Am7), and minor seventh flat fifth written m7-5 to m7b5 (Cm7-5 to Cm7b5). If a later symbol is only a slash bass such as /C, carry the preceding chord root and quality forward, e.g. Dm followed by /C becomes Dm/C. If barlines are visible, separate measures with | and put multiple chord symbols in the same measure separated by spaces, no more than four per measure. If barlines are not visible or chord-to-measure alignment is uncertain, put each chord symbol in its own measure separated by |, set barsKnown=false, and explain that timing is assumed. Do not invent chords or timing. Replace each illegible or ambiguous printed chord with exactly ? at its original position in the progression; keep the readable chords before and after it. Never guess or silently omit an uncertain chord. Explain uncertain positions in warning. Return no prose outside JSON.',
     input: [{ role: 'user', content: [source, { type: 'input_text', text: 'Extract the full chord progression from this chart for a keyboard accompaniment draft.' }] }],
     text: { format: { type: 'json_schema', name: 'chord_chart', strict: true, schema: extractionSchema } } };
   let response;
@@ -168,8 +191,10 @@ export async function extractChordChart(buffer, mime, { key = process.env.OPENAI
   let chart;
   try { chart = JSON.parse(output); } catch { throw new ChordError('코드 판독 결과를 읽을 수 없습니다.'); }
   check(typeof chart.title === 'string' && typeof chart.barsKnown === 'boolean' && typeof chart.warning === 'string', '코드 판독 결과가 올바르지 않습니다.');
-  parseProgression(chart.progression);
-  return chart;
+  const reviewed = reviewExtractedProgression(chart.progression);
+  return { ...chart, ...reviewed, warning: reviewed.unknownCount
+    ? [chart.warning, `확인 필요한 코드 ${reviewed.unknownCount}곳을 ?로 표시했습니다.`].filter(Boolean).join(' ')
+    : chart.warning };
 }
 
 function mimeType(buffer) {
@@ -223,6 +248,6 @@ export async function handleChordArrangement(request, response) {
     const arrangement = buildChordArrangement(options);
     const midi = scoreToMidi(arrangement.midiScore);
     const pdf = await renderUnfoldedScore(arrangement.pdfScore);
-    respond(response, 200, { midiBase64: midi.midi.toString('base64'), pdfBase64: pdf.toString('base64'), measureCount: midi.measureCount, noteCount: midi.noteCount, bpm: midi.bpm, summary: arrangement.summary });
+    respond(response, 200, { midiBase64: midi.midi.toString('base64'), rightMidiBase64: midi.midiByStaff[1].toString('base64'), leftMidiBase64: midi.midiByStaff[2].toString('base64'), pdfBase64: pdf.toString('base64'), measureCount: midi.measureCount, noteCount: midi.noteCount, bpm: midi.bpm, summary: arrangement.summary });
   } catch (error) { respond(response, error.status || 500, { error: error.status ? error.message : '코드 악보 생성 중 서버 오류가 발생했습니다.' }); }
 }

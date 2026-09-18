@@ -1,6 +1,13 @@
 .chord-converter{padding:21px;display:flex;flex-direction:column;gap:14px}
 .chord-converter h2{font-size:1.12rem;letter-spacing:-.02em;margin:-6px 0 0}
 .chord-converter .chord-intro,.chord-status{margin:0;color:#aebdae;font-size:.86rem;line-height:1.6}
+.demo-link{align-self:flex-start;width:max-content;padding:0;border:0;background:none;color:#b8cbb0;font-size:.76rem;line-height:1.4;text-decoration:underline;text-underline-offset:3px;cursor:pointer}
+.demo-link:hover{color:#d7f3ac}
+.demo-link:focus-visible{outline:2px solid #c9ed6f;outline-offset:3px}
+.chord-converter>.demo-link{margin-top:-10px}
+.score-converter .demo-link{margin-top:7px}
+.chord-demo-file-label[hidden]{display:none}
+.chord-demo-file-label{margin-top:-5px;color:#d7efb0;font-size:.78rem;font-weight:700}
 .chord-input-grid{display:grid;grid-template-columns:minmax(240px,.8fr) minmax(320px,1.2fr);gap:15px}
 .chord-source,.chord-manual{display:flex;flex-direction:column;align-items:flex-start;gap:9px;min-width:0;padding:16px;border:1px solid #445247;border-radius:9px;background:#1b241e}
 .chord-source label,.chord-manual label,.chord-patterns legend,.chord-bpm{font-size:.89rem;font-weight:750;color:#e3eddd}
@@ -10,6 +17,15 @@
 .chord-manual input,.chord-manual textarea,.chord-bpm input{width:100%;border:1px solid #60735c;border-radius:6px;background:#111b15;color:#f1f7eb;padding:10px;font-size:.91rem}
 .chord-manual textarea{resize:vertical;min-height:96px;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;line-height:1.6}
 .chord-manual kbd{font-family:inherit;color:#e4f7b8}
+.chord-unknowns{width:100%;padding:12px;border:1px solid #b78949;border-radius:8px;background:#30291e}
+.chord-unknowns[hidden]{display:none}
+.chord-unknowns h3{margin:0 0 5px;color:#ffe2a7;font-size:.88rem}
+.chord-unknowns p{margin:0 0 10px;color:#d4c3a4;font-size:.77rem;line-height:1.5}
+.chord-unknown-list{display:grid;gap:7px}
+.chord-unknown-row{display:grid;grid-template-columns:auto minmax(0,1fr) auto;align-items:center;gap:8px}
+.chord-unknown-row label{color:#f3dda9;font-size:.79rem}
+.chord-unknown-row input{min-width:0}
+.chord-unknown-row button{white-space:nowrap}
 .chord-options{display:flex;align-items:flex-end;gap:14px;flex-wrap:wrap}
 .chord-patterns{border:0;padding:0;margin:0;display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:9px;flex:1;min-width: min(100%,600px)}
 .chord-patterns legend{padding:0;margin:0 0 8px}
@@ -33,3 +49,4 @@
 .chord-summary-item span{color:#b9cab7}
 @media(max-width:900px){.chord-input-grid{grid-template-columns:1fr}.chord-patterns{grid-template-columns:1fr}.chord-pattern{min-height:0}.chord-options{align-items:flex-start;flex-direction:column}}
 @media(max-width:680px){.chord-converter{padding:15px}.chord-output-row .button{width:100%}}
+@media(max-width:680px){.chord-unknown-row{grid-template-columns:1fr auto}.chord-unknown-row label{grid-column:1/-1}}

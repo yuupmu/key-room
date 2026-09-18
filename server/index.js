@@ -3,9 +3,9 @@ import { existsSync } from 'node:fs';
 import { readFile, stat } from 'node:fs/promises';
 import { dirname, extname, isAbsolute, join, relative, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { DEFAULT_SCORE_MODEL, handleScoreToMidi } from './score-to-midi.js';
+import { DEFAULT_SCORE_MODEL, SCORE_REASONING_EFFORT, handleScoreReview, handleScoreStatus, handleScoreToMidi } from './score-to-midi.js';
 import { handleSongSearch, SONG_SEARCH_MODEL } from './song-search.js';
-import { handleUnfoldScore } from './unfold-score.js';
+import { UNFOLD_SCORE_MODEL, UNFOLD_SCORE_REASONING_EFFORT, handleUnfoldScore } from './unfold-score.js';
 import { handleChordChart, handleChordArrangement } from './chord-to-score.js';
 
 const projectRoot = join(dirname(fileURLToPath(import.meta.url)), '..');
@@ -22,14 +22,18 @@ const port = Number(process.env.PORT || 3000);
 const types = {
   '.html': 'text/html; charset=utf-8',
   '.js': 'text/javascript; charset=utf-8',
+  '.mjs': 'text/javascript; charset=utf-8',
   '.css': 'text/css; charset=utf-8',
   '.json': 'application/json; charset=utf-8',
   '.svg': 'image/svg+xml',
   '.png': 'image/png',
   '.jpg': 'image/jpeg',
   '.jpeg': 'image/jpeg',
+  '.pdf': 'application/pdf',
   '.ico': 'image/x-icon',
   '.mp3': 'audio/mpeg',
+  '.mid': 'audio/midi',
+  '.midi': 'audio/midi',
   '.woff2': 'font/woff2'
 };
 
@@ -39,6 +43,14 @@ function respond(response, status, text) {
 }
 
 const server = createServer(async (request, response) => {
+  if (request.url?.split('?')[0] === '/api/score-to-midi/status') {
+    handleScoreStatus(request, response);
+    return;
+  }
+  if (request.url?.split('?')[0] === '/api/score-to-midi/review') {
+    await handleScoreReview(request, response);
+    return;
+  }
   if (request.url?.split('?')[0] === '/api/score-to-midi') {
     await handleScoreToMidi(request, response);
     return;
@@ -74,16 +86,19 @@ const server = createServer(async (request, response) => {
 
   if (pathname === '/health') {
     response.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' });
-    response.end(request.method === 'HEAD' ? undefined : JSON.stringify({ status: 'ok', mode: development ? 'development' : 'production', scoreApi: true, scoreModel: process.env.OPENAI_SCORE_MODEL || DEFAULT_SCORE_MODEL, unfoldScoreApi: true, unfoldScoreModel: 'gpt-5.6-luna', unfoldScoreReasoning: 'high', songSearchApi: true, songSearchModel: SONG_SEARCH_MODEL, songSearchReasoning: 'high', apiKeyConfigured: !!process.env.OPENAI_API_KEY }));
+    response.end(request.method === 'HEAD' ? undefined : JSON.stringify({ status: 'ok', mode: development ? 'development' : 'production', scoreApi: true, scoreModel: process.env.OPENAI_SCORE_TO_MIDI_MODEL || DEFAULT_SCORE_MODEL, scoreReasoning: SCORE_REASONING_EFFORT, unfoldScoreApi: true, unfoldScoreModel: UNFOLD_SCORE_MODEL, unfoldScoreReasoning: UNFOLD_SCORE_REASONING_EFFORT, songSearchApi: true, songSearchModel: SONG_SEARCH_MODEL, songSearchReasoning: 'high', apiKeyConfigured: !!process.env.OPENAI_API_KEY }));
     return;
   }
 
-  const publicPath = join(publicDir, pathname === '/' ? 'index.html' : pathname.replace(/^\/+/, ''));
-  const relativePath = relative(publicDir, publicPath);
+  const requestedPath = join(publicDir, pathname === '/' ? 'index.html' : pathname.replace(/^\/+/, ''));
+  const relativePath = relative(publicDir, requestedPath);
   if (isAbsolute(relativePath) || relativePath === '..' || relativePath.startsWith(`..${sep}`)) {
     respond(response, 403, 'Forbidden');
     return;
   }
+  const publicPath = development && pathname === '/signalsmith-stretch.mjs'
+    ? join(projectRoot, 'node_modules', 'signalsmith-stretch', 'SignalsmithStretch.mjs')
+    : requestedPath;
   try {
     const info = await stat(publicPath);
     if (!info.isFile()) {
@@ -105,5 +120,5 @@ const server = createServer(async (request, response) => {
 server.listen(port, host, () => {
   console.log(`Keyroom ${development ? 'development' : 'production'} server`);
   console.log(`Local: http://${host}:${port}`);
-  console.log(`Score API: ${process.env.OPENAI_SCORE_MODEL || DEFAULT_SCORE_MODEL} (${process.env.OPENAI_API_KEY ? 'API key configured' : 'API key missing'})`);
+  console.log(`Score API: ${process.env.OPENAI_SCORE_TO_MIDI_MODEL || DEFAULT_SCORE_MODEL} (${process.env.OPENAI_API_KEY ? 'API key configured' : 'API key missing'})`);
 });
