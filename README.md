@@ -45,7 +45,7 @@ dist/             npm run build로 생성, Git에서는 제외
 package.json      실행 명령과 Node 버전
 ```
 
-기존 비공개 사이트의 `.openai/hosting.json`은 이 컴퓨터에만 남고 Git에는 포함되지 않습니다.
+실제 배포용 `.openai/hosting.json`은 Git에서 제외하고, 공개 저장소에는 `hosting.example.json`만 포함합니다.
 
 ## 현재 기능
 
