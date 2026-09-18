@@ -57,7 +57,7 @@
       download.download = `${file.name.replace(/\.[^.]+$/, '')}-unfolded.pdf`;
       download.hidden = false;
       const source = response.headers.get('X-Source-Measures'), output = response.headers.get('X-Output-Measures');
-      status.textContent = source && output ? `${source}마디를 연주 순서 ${output}마디로 조판했습니다. PDF를 다운로드해 원본과 대조해 주세요.` : '펼친 악보 PDF가 준비되었습니다. 원본과 대조해 주세요.';
+      status.textContent = source && output ? (/\.pdf$/i.test(file.name) ? `${source}마디를 연주 순서 ${output}마디로 조판했습니다. PDF를 다운로드해 원본과 대조해 주세요.` : `MIDI ${source}마디를 오선 악보 PDF로 만들었습니다. 원본 연주와 대조해 주세요.`) : '오선 악보 PDF가 준비되었습니다. 원본과 대조해 주세요.';
     } catch (error) { status.textContent = error.message || '악보를 만들지 못했습니다.'; }
     finally { button.disabled = false; demo.disabled = false; input.disabled = false; button.textContent = '악보 펼치기'; }
   });

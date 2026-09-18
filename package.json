@@ -11,7 +11,7 @@
     "dev": "node server/index.js --dev",
     "build": "node scripts/build.mjs",
     "start": "node server/index.js",
-    "check": "node --check src/client/app.js && node --check src/client/score-converter.js && node --check src/client/chord-converter.js && node --check src/client/chord-offline.js && node --check src/client/unfold-score.js && node --check src/client/song-search.js && node --check server/index.js && node --check server/score-to-midi.js && node --check server/chord-to-score.js && node --check server/unfold-score.js && node --check server/song-search.js && node --check scripts/build.mjs && node --check scripts/render-merry-demo.mjs && node --test server/score-to-midi.test.js server/chord-to-score.test.js server/chord-offline.test.js server/unfold-score.test.js server/song-search.test.js"
+    "check": "node --check src/client/app.js && node --check src/client/score-converter.js && node --check src/client/chord-converter.js && node --check src/client/chord-offline.js && node --check src/client/unfold-score.js && node --check src/client/song-search.js && node --check src/worker/index.js && node --check src/worker/midi-score.js && node --check server/index.js && node --check server/score-to-midi.js && node --check server/chord-to-score.js && node --check server/unfold-score.js && node --check server/song-search.js && node --check scripts/build.mjs && node --check scripts/render-merry-demo.mjs && node --test server/score-to-midi.test.js server/chord-to-score.test.js server/chord-offline.test.js server/unfold-score.test.js server/song-search.test.js server/worker-midi.test.js"
   },
   "dependencies": {
     "@fontsource/noto-sans-jp": "^5.3.0",

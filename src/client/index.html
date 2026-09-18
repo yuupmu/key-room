@@ -121,7 +121,7 @@
       </section>
 
       <section class="score-converter panel" aria-labelledby="unfoldTitle">
-        <div><div class="eyebrow">UNFOLD SCORE</div><h2 id="unfoldTitle">연주 순서대로 펼친 악보</h2><p>PDF 악보의 마디를 잘라 D.S.·D.C.·코다·1·2번 엔딩·반복기호에 따른 연주 순서로 재배치합니다. MIDI도 조성을 추론해 오선 악보로 만듭니다.</p><button class="demo-link" id="unfoldDemo" type="button" aria-label="Merry-go-round.pdf 데모 파일 선택">demo</button><p id="unfoldStatus" role="status" aria-live="polite">PDF · MIDI, 최대 8MB</p></div>
+        <div><div class="eyebrow">UNFOLD SCORE</div><h2 id="unfoldTitle">연주 순서대로 펼친 악보</h2><p>PDF 악보의 마디를 잘라 D.S.·D.C.·코다·1·2번 엔딩·반복기호에 따른 연주 순서로 재배치합니다. MIDI 파일도 조성과 박자를 분석해 오선 악보 PDF로 만듭니다.</p><button class="demo-link" id="unfoldDemo" type="button" aria-label="Merry-go-round.pdf 데모 파일 선택">demo</button><p id="unfoldStatus" role="status" aria-live="polite">PDF · MIDI, 최대 8MB</p></div>
         <form id="unfoldForm" class="score-convert-form">
           <label for="unfoldInput">악보 또는 MIDI</label><input id="unfoldInput" type="file" accept=".pdf,.mid,.midi,application/pdf,audio/midi" required>
           <button class="button button-primary" id="unfoldButton" type="submit">악보 펼치기</button>

@@ -1,8 +1,12 @@
-import { PDFDocument } from './pdf-lib.esm.js';
+import * as pdfLib from './pdf-lib.esm.js';
+import parseMidi from './midi-parser.js';
 import { searchSong } from './song-search.js';
 import { arrangeChords } from './chord-offline.js';
 import { ScoreProblem, finalizeReview, reviewScore, scoreToMidi } from './score.js';
 import { unfoldPdf } from './unfold.js';
+import { createMidiScorePdf, guessMidiKey, MidiScoreError, readMidiScore } from './midi-score.js';
+
+const { PDFDocument } = pdfLib;
 
 const MAX_FILE_BYTES = 8 * 1024 * 1024;
 const headers = { 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff' };
@@ -169,16 +173,38 @@ async function songSearch(request, env) {
 async function unfold(request, env) {
   check(request.method === 'POST', 'POST 요청만 지원합니다.', 405);
   const bytes = await readBytes(request);
-  if ([77, 84, 104, 100].every((value, index) => bytes[index] === value)) throw new ApiProblem('사이트의 악보 펼치기는 PDF 파일을 지원합니다. MIDI 악보화는 현재 로컬 서버에서 사용해 주세요.', 415);
-  check(typeOf(bytes) === 'application/pdf', '사이트의 악보 펼치기는 PDF 파일을 지원합니다. MIDI 악보화는 현재 로컬 서버에서 사용해 주세요.', 415);
-  const result = await unfoldPdf(bytes, body => completeAI(env, body, 12 * 60 * 1000), PDFDocument);
-  return new Response(result.pdf, { status: 200, headers: { ...headers, 'Content-Type': 'application/pdf', 'X-Source-Measures': String(result.sourceMeasures), 'X-Output-Measures': String(result.outputMeasures) } });
+  let result;
+  if ([77, 84, 104, 100].every((value, index) => bytes[index] === value)) {
+    let filename;
+    try { filename = decodeURIComponent(request.headers.get('x-score-filename') || 'MIDI Score.mid').slice(0, 300); }
+    catch { throw new ApiProblem('MIDI 파일명을 읽을 수 없습니다.', 400); }
+    const midi = readMidiScore(bytes, parseMidi);
+    let key = guessMidiKey(midi);
+    if (!midi.keySignature && env.OPENAI_API_KEY) {
+      const histogram = Array(12).fill(0);
+      for (const track of midi.tracks) for (const note of track.notes) histogram[note.pitch % 12] += Math.min(note.end - note.start, 4);
+      try {
+        const inferred = await completeAI(env, {
+          model: env.OPENAI_SCORE_MODEL || 'gpt-5.6-luna', reasoning: { effort: 'medium' }, max_output_tokens: 1000,
+          instructions: 'Infer the most defensible notated key signature for this MIDI pitch-class duration profile. Do not force C major. Return only the requested JSON schema.',
+          input: [{ role: 'user', content: [{ type: 'input_text', text: JSON.stringify({ filename: filename.slice(0, 100), histogram: histogram.map(value => Math.round(value * 10) / 10), meter: midi.meter, guessedKey: key }) }] }],
+          text: { format: { type: 'json_schema', name: 'midi_key', strict: true, schema: { type: 'object', additionalProperties: false, properties: { fifths: { type: 'integer' }, mode: { type: 'string', enum: ['major', 'minor'] } }, required: ['fifths', 'mode'] } } }
+        }, 90000);
+        if (Number.isInteger(inferred.fifths) && Math.abs(inferred.fifths) <= 7 && ['major', 'minor'].includes(inferred.mode)) key = inferred;
+      } catch (error) { console.error('[midi-key-inference]', error?.status || error?.name || 'unknown'); }
+    }
+    result = await createMidiScorePdf(midi, filename, key, pdfLib);
+  } else {
+    check(typeOf(bytes) === 'application/pdf', 'PDF 악보 또는 MIDI 파일을 선택해 주세요.', 415);
+    result = await unfoldPdf(bytes, body => completeAI(env, body, 12 * 60 * 1000), PDFDocument);
+  }
+  return new Response(result.pdf, { status: 200, headers: { ...headers, 'Content-Type': 'application/pdf', 'X-Source-Measures': String(result.sourceMeasures), 'X-Output-Measures': String(result.outputMeasures), ...(result.keyFifths === undefined ? {} : { 'X-Key-Fifths': String(result.keyFifths), 'X-Key-Mode': result.keyMode }) } });
 }
 
 export default {
   async fetch(request, env) {
     const pathname = new URL(request.url).pathname;
-    if (pathname === '/health') return reply({ status: 'ok', mode: 'sites', scoreApi: true, songSearchApi: true, unfoldScoreApi: true, apiKeyConfigured: !!env.OPENAI_API_KEY });
+    if (pathname === '/health') return reply({ status: 'ok', mode: 'sites', scoreApi: true, songSearchApi: true, unfoldScoreApi: true, midiScoreApi: true, apiKeyConfigured: !!env.OPENAI_API_KEY });
     if (!pathname.startsWith('/api/')) return env.ASSETS ? env.ASSETS.fetch(request) : new Response('Not found', { status: 404 });
     if (!sameOrigin(request)) return reply({ error: '다른 사이트에서 보낸 요청은 허용하지 않습니다.' }, 403);
     try {
@@ -190,7 +216,7 @@ export default {
       if (pathname === '/api/unfold-score') return await unfold(request, env);
       return reply({ error: '요청한 기능을 찾지 못했습니다.' }, 404);
     } catch (error) {
-      if (!(error instanceof ApiProblem) && !(error instanceof ScoreProblem) && error?.status == null) console.error('[keyroom-api]', error?.name || 'UnknownError');
+      if (!(error instanceof ApiProblem) && !(error instanceof ScoreProblem) && !(error instanceof MidiScoreError) && error?.status == null) console.error('[keyroom-api]', error?.name || 'UnknownError');
       return failure(error);
     }
   }
