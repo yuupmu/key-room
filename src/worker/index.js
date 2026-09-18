@@ -1,6 +1,6 @@
 import { PDFDocument } from './pdf-lib.esm.js';
 import { searchSong } from './song-search.js';
-import { arrangeChords } from '../client/chord-offline.js';
+import { arrangeChords } from './chord-offline.js';
 import { ScoreProblem, finalizeReview, reviewScore, scoreToMidi } from './score.js';
 import { unfoldPdf } from './unfold.js';
 
