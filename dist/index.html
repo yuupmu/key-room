@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#171918">
+  <meta name="description" content="오디오와 MIDI를 함께 재생하며 연습하는 밴드 키보드 세션 작업 공간">
+  <title>밴드 키보드 연습실</title>
+  <link rel="stylesheet" href="./styles.css">
+  <script src="./app.js" defer></script>
+</head>
+<body>
+  <div class="app-shell" id="app">
+    <header class="topbar">
+      <div class="brand"><span class="brand-mark" aria-hidden="true"><i></i><i></i><i></i><i></i></span><span>KEY<span class="brand-accent">/</span>ROOM</span></div>
+      <span class="session-label">SESSION 01 <span class="label-divider">/</span> 밴드 키보드 연습실</span>
+      <div class="top-actions"><span class="local-badge"><span class="status-dot"></span> 이 기기에서만 재생</span><button class="button button-outline" id="openResources" type="button">＋ 자료 추가</button></div>
+    </header>
+
+    <main class="workspace">
+      <section class="transport" aria-label="재생 제어">
+        <div class="transport-main">
+          <button class="icon-button play-button" id="playButton" type="button" aria-label="재생" title="재생"><span id="playGlyph">▶</span></button>
+          <button class="icon-button stop-button" id="stopButton" type="button" aria-label="정지" title="정지">■</button>
+          <div class="time-readout" aria-live="off"><span id="currentTime">0:00</span><span class="time-divider">/</span><span id="durationTime">0:00</span></div>
+          <input id="seekBar" class="seek-bar" type="range" min="0" max="1000" value="0" aria-label="재생 위치">
+        </div>
+        <div class="transport-settings">
+          <label class="tempo-control" for="speedSelect"><span>속도</span><select id="speedSelect" aria-label="재생 속도"><option value="0.5">50%</option><option value="0.75">75%</option><option value="0.9">90%</option><option value="1" selected>100%</option><option value="1.1">110%</option><option value="1.25">125%</option></select></label>
+          <div class="bpm-display"><span>BPM</span><strong id="bpmValue">—</strong></div>
+        </div>
+      </section>
+
+      <section class="arrangement panel" aria-labelledby="arrangementTitle">
+        <div class="section-heading"><div><div class="eyebrow">01 / ARRANGEMENT</div><h1 id="arrangementTitle">연습 타임라인</h1></div><span class="section-hint">파일을 끌어다 놓거나 각 트랙을 눌러 추가하세요</span></div>
+        <div class="timeline">
+          <div class="track-head ruler-head">TRACKS</div><div class="ruler" id="ruler" aria-hidden="true"></div>
+          <div class="track-head"><span class="track-icon audio-icon">♫</span><span class="track-label"><strong>원곡 오디오</strong><small>MP3 · WAV</small></span><button class="track-mute" id="audioMute" type="button" aria-pressed="false" aria-label="원곡 오디오 음소거">M</button></div>
+          <div class="track-lane audio-lane drop-target" id="audioDrop" role="button" tabindex="0" aria-label="원곡 오디오 파일 추가"><div class="track-empty" id="audioEmpty"><span class="empty-plus">＋</span><span>원곡 오디오를 놓으세요</span><small>MP3 또는 WAV</small></div><canvas id="waveform" class="waveform" aria-hidden="true"></canvas><div class="clip-name" id="audioClipName"></div><div class="playhead" aria-hidden="true"></div></div>
+          <div class="track-head"><span class="track-icon midi-icon">▦</span><span class="track-label"><strong>악보 또는 MIDI</strong><small>MIDI · .mid</small></span><button class="track-mute" id="midiMute" type="button" aria-pressed="false" aria-label="MIDI 음소거">M</button></div>
+          <div class="track-lane midi-lane drop-target" id="midiDrop" role="button" tabindex="0" aria-label="MIDI 파일 추가"><div class="track-empty" id="midiEmpty"><span class="empty-plus">＋</span><span>악보 또는 MIDI를 놓으세요</span><small>지금은 MIDI 파일을 넣을 수 있어요</small></div><div id="midiOverview" class="midi-overview" aria-hidden="true"></div><div class="clip-name" id="midiClipName"></div><div class="playhead" aria-hidden="true"></div></div>
+        </div>
+        <div class="timeline-footer"><div class="file-summary" id="fileSummary">오디오와 MIDI를 추가하면 함께 재생됩니다.</div><button class="text-button" id="clearFiles" type="button">파일 모두 비우기</button></div>
+      </section>
+
+      <section class="bottom-grid">
+        <div class="visualizer panel">
+          <div class="view-header"><div><div class="eyebrow">02 / PLAY VIEW</div><h2>보고 치기</h2></div><div class="tabs" role="tablist" aria-label="MIDI 보기 방식"><button class="tab active" id="tab-fall" type="button" role="tab" aria-selected="true" aria-controls="view-fall" data-view="fall">낙하 노트</button><button class="tab" id="tab-score" type="button" role="tab" aria-selected="false" aria-controls="view-score" data-view="score">악보</button><button class="tab" id="tab-roll" type="button" role="tab" aria-selected="false" aria-controls="view-roll" data-view="roll">피아노롤</button></div></div>
+          <div class="view-stage" id="view-fall" role="tabpanel" aria-labelledby="tab-fall"><canvas id="fallCanvas" aria-label="건반으로 내려오는 MIDI 음표"></canvas><div class="stage-empty" id="fallEmpty"><div class="stage-empty-icon">▤</div><strong>MIDI를 넣으면 다음에 칠 음이 보여요</strong><span>음의 길이와 건반 위치를 따라 연습하세요.</span></div></div>
+          <div class="view-stage hidden" id="view-score" role="tabpanel" aria-labelledby="tab-score"><div class="feature-preview"><div class="preview-staff" aria-hidden="true"><span>𝄞</span><i></i><i></i><i></i></div><strong>악보 보기는 다음 단계에서 연결됩니다</strong><p>악보 이미지 변환과 조옮김을 구현하면 이곳에 표시됩니다.</p><button class="button button-soft" type="button" data-feature="악보 보기">구현 예정</button></div></div>
+          <div class="view-stage hidden" id="view-roll" role="tabpanel" aria-labelledby="tab-roll"><canvas id="rollCanvas" aria-label="MIDI 음표의 음명과 길이를 보여주는 피아노롤"></canvas><div class="stage-empty" id="rollEmpty"><div class="stage-empty-icon">▦</div><strong>MIDI를 넣으면 음명과 길이가 보여요</strong><span>도♯4처럼 각 음의 이름을 확인할 수 있습니다.</span></div></div>
+          <div class="view-footer"><span class="legend"><i class="legend-right"></i> 오른손 / 높은 음역 <i class="legend-left"></i> 왼손 / 낮은 음역</span><span id="noteCount">MIDI 대기 중</span></div>
+        </div>
+        <aside class="tools-panel panel" aria-labelledby="toolsTitle"><div class="eyebrow">03 / PRACTICE TOOLS</div><h2 id="toolsTitle">연습 도구</h2><p class="tools-intro">필요한 기능을 순서대로 연결할 예정입니다.</p><div class="tool-list"><button class="tool-button" type="button" data-feature="악보 → MIDI 변환"><span class="tool-icon">♬</span><span><strong>악보 → MIDI 변환</strong><small>왼손·오른손 분리</small></span><span class="tool-arrow">↗</span></button><button class="tool-button" type="button" data-feature="조옮김"><span class="tool-icon">♯</span><span><strong>조옮김</strong><small>MIDI와 악보 함께 변경</small></span><span class="tool-arrow">↗</span></button><button class="tool-button" type="button" data-feature="전자피아노 연결"><span class="tool-icon">⌘</span><span><strong>전자피아노 연결</strong><small>내 연주와 MIDI 맞추기</small></span><span class="tool-arrow">↗</span></button></div><div class="next-step"><span class="next-dot"></span><span>지금은 MP3·WAV·MIDI 파일 재생에 집중한 첫 버전입니다.</span></div></aside>
+      </section>
+    </main>
+  </div>
+  <input id="audioInput" type="file" accept=".mp3,.wav,audio/mpeg,audio/wav" hidden>
+  <input id="midiInput" type="file" accept=".mid,.midi,audio/midi" hidden>
+  <audio id="audioPlayer" preload="metadata"></audio>
+  <div class="overlay hidden" id="resourceOverlay" role="presentation"><div class="drawer" role="dialog" aria-modal="true" aria-labelledby="resourceTitle"><div class="drawer-header"><div><div class="eyebrow">RESOURCES</div><h2 id="resourceTitle">자료 추가</h2></div><button class="close-button" id="closeResources" type="button" aria-label="닫기">×</button></div><p>지금은 가지고 있는 파일을 직접 추가할 수 있어요.</p><button class="drawer-action" id="drawerAudio" type="button"><span>♫</span><strong>원곡 오디오 추가</strong><small>MP3 · WAV</small></button><button class="drawer-action" id="drawerMidi" type="button"><span>▦</span><strong>MIDI 파일 추가</strong><small>.mid · .midi</small></button><div class="drawer-future"><strong>곡 자료 검색</strong><p>악보 판매처, 영상, 보컬 음역, BPM을 찾아주는 기능은 API 연결 단계에서 제공할 예정입니다.</p></div></div></div>
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
+</body>
+</html>
