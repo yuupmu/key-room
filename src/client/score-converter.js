@@ -89,7 +89,7 @@
 
   function showMidi(result, name) {
     clearDownloads();
-    if (!result.rightMidiBase64) throw new Error('오른손 MIDI를 받지 못했습니다. 서버를 다시 시작해 주세요.');
+    if (!result.rightMidiBase64) throw new Error('오른손 MIDI를 받지 못했습니다. 다시 시도해 주세요.');
     offerMidi(result.rightMidiBase64, `${name}-right.mid`, 'right', rightDownload);
     if (result.leftMidiBase64) offerMidi(result.leftMidiBase64, `${name}-left.mid`, 'left', leftDownload);
     clearReview();
@@ -181,7 +181,7 @@
     let result;
     try { result = JSON.parse(body); }
     catch {
-      if (response.status === 404 || response.status === 405) throw new Error('악보 변환 API가 실행되지 않습니다. 로컬 개발 서버를 다시 시작해 주세요.');
+      if (response.status === 404 || response.status === 405) throw new Error('악보 변환 기능에 연결하지 못했습니다. 잠시 후 다시 시도해 주세요.');
       throw new Error(`서버 응답을 읽지 못했습니다. (HTTP ${response.status})`);
     }
     if (!response.ok) throw new Error(result.error || '악보를 변환하지 못했습니다.');
@@ -195,6 +195,10 @@
       const result = await readResponse(response);
       if (result.status === 'completed') return result;
       const progress = result.progress || {};
+      if (!Number.isInteger(progress.pageCount)) {
+        status.textContent = 'AI가 악보 전체를 판독 중입니다. 큰 악보는 몇 분 걸릴 수 있습니다…';
+        continue;
+      }
       const range = Number.isInteger(progress.visualStart)
         ? `${progress.visualStart}${progress.visualEnd > progress.visualStart ? `~${progress.visualEnd}` : ''}번째 판독 구간 · ` : '';
       const elapsed = Number.isFinite(progress.startedAt) ? ` · 현재 단계 ${Math.floor((Date.now() - progress.startedAt) / 1000)}초` : '';

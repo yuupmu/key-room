@@ -1,5 +1,5 @@
-// Static Sites have no Node API. Keep the chord spellings and three patterns in
-// sync with server/chord-to-score.js; the local server remains the full engraver.
+// Keep the chord spellings and three patterns in sync with server/chord-to-score.js.
+// This browser fallback also keeps manual chord entry usable if the hosted API is unavailable.
 const STEPS = ['C', 'D', 'E', 'F', 'G', 'A', 'B'];
 const TICKS_PER_BEAT = 6720;
 const SEMITONES = { C: 0, D: 2, E: 4, F: 5, G: 7, A: 9, B: 11 };
