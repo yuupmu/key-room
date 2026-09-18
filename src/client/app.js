@@ -1,106 +1,844 @@
 (() => {
   'use strict';
   const $ = id => document.getElementById(id);
-  const audio = $('audioPlayer');
   const names = ['도','도♯','레','레♯','미','파','파♯','솔','솔♯','라','라♯','시'];
+  const pitchNames = ['C','C#','D','D#','E','F','F#','G','G#','A','A#','B'];
+  const pianoSamples = {
+    A0:'A0.mp3',C1:'C1.mp3','D#1':'Ds1.mp3','F#1':'Fs1.mp3',A1:'A1.mp3',
+    C2:'C2.mp3','D#2':'Ds2.mp3','F#2':'Fs2.mp3',A2:'A2.mp3',
+    C3:'C3.mp3','D#3':'Ds3.mp3','F#3':'Fs3.mp3',A3:'A3.mp3',
+    C4:'C4.mp3','D#4':'Ds4.mp3','F#4':'Fs4.mp3',A4:'A4.mp3',
+    C5:'C5.mp3','D#5':'Ds5.mp3','F#5':'Fs5.mp3',A5:'A5.mp3',
+    C6:'C6.mp3','D#6':'Ds6.mp3','F#6':'Fs6.mp3',A6:'A6.mp3',
+    C7:'C7.mp3','D#7':'Ds7.mp3','F#7':'Fs7.mp3',A7:'A7.mp3',C8:'C8.mp3'
+  };
   const blackKeys = new Set([1,3,6,8,10]);
   const state = {
-    audioFile:null,audioUrl:null,audioSourceDuration:0,audioTrimStart:0,wavePeaks:null,
-    midiFile:null,notes:[],midiTailDuration:0,midiDuration:0,bpm:null,tempoPoints:[],ticksPerBeat:480,nextId:1,
-    position:0,playing:false,speed:1,startedAt:0,startedPosition:0,audioMuted:false,midiMuted:false,
-    ctx:null,activeNotes:new Set(),nextNote:0,timer:null,raf:null,tab:'fall',history:[],selectedNoteId:null,editorStart:0,
-    toastTimer:null,lastFocus:null
+    tracks:[],nextTrackId:1,selectedAudioTrack:null,fileTarget:null,originalBpm:null,originalBpmManual:false,gridBpm:120,gridBpmManual:false,
+    midiFile:null,notes:[],midiTailDuration:0,midiDuration:0,tempoPoints:[],ticksPerBeat:480,nextId:1,
+    position:0,playing:false,speed:1,speedFactor:1,fallScale:56,startedAt:0,startedPosition:0,
+    ctx:null,pianoLoad:null,pianoBuffers:null,livePiano:null,playStartId:0,nextNote:0,timer:null,raf:null,tab:'fall',history:[],selectedNoteId:null,editorStart:0,
+    metronomeOn:false,metronomeTimer:null,metronomeBeat:0,metronomeWhen:0,metronomeSources:new Set(),
+    toastTimer:null,lastFocus:null,selectedTrack:null,editorViewSeconds:8,editorRowHeight:22,editorGesture:null,practiceFlagTime:null,practiceDrag:null,
+    midiAccess:null,midiInput:null,midiInputId:'',heldNotes:new Map(),performanceNotes:[],recordingNotes:new Map(),recording:false
   };
-  const viewLength = 8;
-  const rowHeight = 22;
   const el = {
-    play:$('playButton'),glyph:$('playGlyph'),stop:$('stopButton'),current:$('currentTime'),duration:$('durationTime'),
-    seek:$('seekBar'),speed:$('speedSelect'),bpm:$('bpmValue'),audioInput:$('audioInput'),midiInput:$('midiInput'),
-    audioDrop:$('audioDrop'),midiDrop:$('midiDrop'),wave:$('waveform'),trimWave:$('trimWaveform'),
-    midiOverview:$('midiOverview'),audioName:$('audioClipName'),midiName:$('midiClipName'),summary:$('fileSummary'),
-    fall:$('fallCanvas'),roll:$('rollCanvas'),fallEmpty:$('fallEmpty'),rollEmpty:$('rollEmpty'),
-    noteCount:$('noteCount'),ruler:$('ruler'),toast:$('toast'),trimRange:$('trimRange'),trimSeconds:$('trimSeconds'),
-    sourceDuration:$('sourceDuration'),trimStartLabel:$('trimStartLabel'),trimRemaining:$('trimRemaining'),
-    editorGrid:$('editorGrid'),editorWindow:$('editorWindow'),editorWindowLabel:$('editorWindowLabel'),
-    notePitch:$('notePitch'),noteStart:$('noteStart'),noteDuration:$('noteDuration'),noteHand:$('noteHand'),
-    noteFormTitle:$('noteFormTitle'),selectedNoteHint:$('selectedNoteHint'),saveNote:$('saveNote'),
-    deleteNote:$('deleteNote'),cancelNote:$('cancelNote'),undoMidi:$('undoMidi'),editNoteCount:$('editNoteCount')
+    play:$('playButton'),glyph:$('playGlyph'),stop:$('stopButton'),metronome:$('metronomeToggle'),current:$('currentTime'),duration:$('durationTime'),
+    seek:$('seekBar'),speed:$('speedSelect'),originalBpm:$('originalBpmInput'),bpm:$('bpmInput'),audioInput:$('audioInput'),midiInput:$('midiInput'),trackRows:$('trackRows'),trimWave:$('trimWaveform'),summary:$('fileSummary'),
+    fall:$('fallCanvas'),roll:$('rollCanvas'),fallEmpty:$('fallEmpty'),rollEmpty:$('rollEmpty'),fallSpeedLabel:$('fallSpeedLabel'),
+    noteCount:$('noteCount'),ruler:$('ruler'),toast:$('toast'),trimRange:$('trimRange'),trimSeconds:$('trimSeconds'),leadInRange:$('leadInRange'),leadInSeconds:$('leadInSeconds'),
+    practiceScrub:$('practiceScrub'),practiceBeatGrid:$('practiceBeatGrid'),practiceMidiNotes:$('practiceMidiNotes'),practiceScrubEmpty:$('practiceScrubEmpty'),practicePosition:$('practicePosition'),practiceFlag:$('practiceFlag'),practiceTime:$('practiceTime'),placePracticeFlag:$('placePracticeFlag'),clearPracticeFlag:$('clearPracticeFlag'),
+    sourceDuration:$('sourceDuration'),trimStartLabel:$('trimStartLabel'),leadInLabel:$('leadInLabel'),trimRemaining:$('trimRemaining'),
+    editorGrid:$('editorGrid'),editorScroll:$('editorScroll'),editorWindow:$('editorWindow'),editorWindowLabel:$('editorWindowLabel'),editorTrack:$('editorTrack'),editorZoomLabel:$('editorZoomLabel'),selectedNoteInfo:$('selectedNoteInfo'),undoMidi:$('undoMidi'),editNoteCount:$('editNoteCount'),
+    connectMidi:$('connectMidi'),midiDevice:$('midiDevice'),midiStatus:$('midiStatus'),liveNotes:$('liveNotes'),liveNoteText:$('liveNoteText'),recordPerformance:$('recordPerformance'),clearPerformance:$('clearPerformance'),downloadPerformance:$('downloadPerformance'),performanceStatus:$('performanceStatus')
   };
 
   const clamp = (value,min,max) => Math.max(min,Math.min(max,value));
   const noteName = pitch => names[pitch%12] + (Math.floor(pitch/12)-1);
+  const pianoNote = pitch => pitchNames[pitch%12] + (Math.floor(pitch/12)-1);
   function fmt(seconds){const s=Math.floor(Math.max(0,Number.isFinite(seconds)?seconds:0));return `${Math.floor(s/60)}:${String(s%60).padStart(2,'0')}`}
-  function audioLength(){return Math.max(0,state.audioSourceDuration-state.audioTrimStart)}
-  function duration(){return Math.max(audioLength(),state.midiDuration)}
+  const trackById = id => state.tracks.find(track=>track.id===id);
+  const audioTracks = () => state.tracks.filter(track=>track.type==='audio');
+  const midiTracks = () => state.tracks.filter(track=>track.type==='midi');
+  const audioLength = track => Math.max(0,(track?.leadIn||0)+(track?.sourceDuration||0)-(track?.trimStart||0));
+  const audioSourceTime = (track, position) => (track?.trimStart||0)+position-(track?.leadIn||0);
+  function duration(){return Math.max(state.midiDuration,0,...audioTracks().map(audioLength))}
   function toast(message){el.toast.textContent=message;el.toast.classList.add('show');clearTimeout(state.toastTimer);state.toastTimer=setTimeout(()=>el.toast.classList.remove('show'),3300)}
   function ensureContext(){if(!state.ctx){const Context=window.AudioContext||window.webkitAudioContext;if(Context)state.ctx=new Context()}return state.ctx}
+  function loadPiano(){
+    if(!window.Tone)return Promise.reject(Error('Tone.js를 불러오지 못했습니다.'));
+    if(!state.pianoLoad)state.pianoLoad=new Promise((resolve,reject)=>{
+      const buffers=new Tone.Buffers({urls:pianoSamples,baseUrl:'./assets/salamander/',onload:()=>{state.pianoBuffers=buffers;resolve(buffers)},onerror:reject});
+    });
+    return state.pianoLoad;
+  }
+  async function preparePiano(){
+    if(!window.Tone)throw Error('Tone.js를 불러오지 못했습니다.');
+    await Promise.all([Tone.start(),loadPiano()]);
+  }
+  function createPiano(){
+    const urls=Object.fromEntries(Object.keys(pianoSamples).map(note=>[note,state.pianoBuffers.get(note)]));
+    return new Tone.Sampler({urls,release:.2}).toDestination();
+  }
   function currentPosition(){return state.playing?clamp(state.startedPosition+(performance.now()-state.startedAt)*state.speed/1000,0,duration()):state.position}
+  function stopMetronomeClicks(){for(const source of state.metronomeSources){try{source.stop()}catch(e){}}state.metronomeSources.clear()}
+  function soundMetronomeBeat(beat,when){
+    const ctx=state.ctx,accent=beat%4===0,oscillator=ctx.createOscillator(),gain=ctx.createGain();
+    oscillator.type='square';oscillator.frequency.setValueAtTime(accent?1320:880,when);
+    gain.gain.setValueAtTime(accent?.075:.045,when);
+    gain.gain.exponentialRampToValueAtTime(.0001,when+(accent?.065:.045));
+    oscillator.connect(gain);gain.connect(ctx.destination);
+    oscillator.start(when);oscillator.stop(when+(accent?.07:.05));
+    state.metronomeSources.add(oscillator);
+    oscillator.onended=()=>{state.metronomeSources.delete(oscillator);oscillator.disconnect();gain.disconnect()};
+  }
+  function scheduleMetronome(){
+    if(!state.metronomeOn||!state.ctx)return;
+    const now=state.ctx.currentTime,until=now+.25;
+    const position=state.playing?currentPosition():0;
+    const interval=60/(state.gridBpm*state.speedFactor);
+    if(state.playing)state.metronomeBeat=Math.max(state.metronomeBeat,Math.ceil(secondsToBeat(position)-.04));
+    else if(state.metronomeWhen<now-interval){
+      const missed=Math.ceil((now-state.metronomeWhen)/interval);
+      state.metronomeBeat+=missed;state.metronomeWhen+=missed*interval;
+    }
+    for(let count=0;count<16;count++){
+      const beat=state.metronomeBeat;
+      const songTime=state.playing?beatToSeconds(beat):0;
+      const when=state.playing?now+(songTime-position)/state.speed:state.metronomeWhen;
+      if((state.playing&&songTime>=duration())||when>=until)break;
+      if(when>=now-.02)soundMetronomeBeat(beat,Math.max(now+.002,when));
+      state.metronomeBeat++;
+      if(!state.playing)state.metronomeWhen+=interval;
+    }
+  }
+  function resetMetronomeClock(continueFromSong=false){
+    if(!state.metronomeOn||!state.ctx)return;
+    stopMetronomeClicks();
+    const position=currentPosition();
+    state.metronomeBeat=state.playing||continueFromSong?Math.max(0,Math.ceil(secondsToBeat(position)-.0001)):0;
+    state.metronomeWhen=state.ctx.currentTime+(continueFromSong?Math.max(.01,(beatToSeconds(state.metronomeBeat)-position)/state.speed):.01);
+    scheduleMetronome();
+  }
+  async function toggleMetronome(){
+    state.metronomeOn=!state.metronomeOn;
+    el.metronome.setAttribute('aria-pressed',String(state.metronomeOn));
+    el.metronome.setAttribute('aria-label',state.metronomeOn?'메트로놈 끄기':'메트로놈 켜기');
+    el.metronome.textContent=state.metronomeOn?'♩ 메트로놈 끄기':'♩ 메트로놈 켜기';
+    if(!state.metronomeOn){clearInterval(state.metronomeTimer);state.metronomeTimer=null;stopMetronomeClicks();return}
+    const ctx=ensureContext();
+    if(!ctx){toggleMetronome();toast('이 브라우저에서는 메트로놈 소리를 재생할 수 없습니다.');return}
+    try{if(ctx.state==='suspended')await ctx.resume()}catch(e){
+      if(state.metronomeOn)toggleMetronome();toast('메트로놈 소리를 시작하지 못했습니다.');return;
+    }
+    if(!state.metronomeOn)return;
+    clearInterval(state.metronomeTimer);
+    resetMetronomeClock();
+    state.metronomeTimer=setInterval(scheduleMetronome,40);
+  }
   function noteIndexAt(time){let low=0,high=state.notes.length;while(low<high){const mid=(low+high)>>1;if(state.notes[mid].start<time)low=mid+1;else high=mid}return low}
-  function stopNotes(){for(const oscillator of state.activeNotes){try{oscillator.stop()}catch(e){}}state.activeNotes.clear()}
-  function soundNote(note,when,seconds){const ctx=state.ctx;if(!ctx||state.midiMuted)return;const oscillator=ctx.createOscillator(),gain=ctx.createGain();oscillator.type='triangle';oscillator.frequency.value=440*Math.pow(2,(note.pitch-69)/12);const level=clamp(note.velocity/127,0.1,1)*.11;gain.gain.setValueAtTime(.0001,when);gain.gain.exponentialRampToValueAtTime(Math.max(.002,level),when+.012);gain.gain.exponentialRampToValueAtTime(.0001,when+Math.max(.05,seconds));oscillator.connect(gain);gain.connect(ctx.destination);oscillator.start(when);oscillator.stop(when+Math.max(.07,seconds)+.02);state.activeNotes.add(oscillator);oscillator.onended=()=>state.activeNotes.delete(oscillator)}
-  function schedule(){if(!state.playing||!state.ctx||!state.notes.length)return;const now=currentPosition(),ahead=now+.24*state.speed;while(state.nextNote<state.notes.length&&state.notes[state.nextNote].start<ahead){const note=state.notes[state.nextNote++];if(note.end<=now)continue;const when=state.ctx.currentTime+Math.max(0,(note.start-now)/state.speed);soundNote(note,when,Math.min(4,Math.max(.06,note.end-Math.max(now,note.start))/state.speed))}}
-  function sustainAt(time){if(!state.ctx||state.midiMuted)return;for(const note of state.notes){if(note.start<time&&note.end>time)soundNote(note,state.ctx.currentTime+.01,Math.min(4,(note.end-time)/state.speed))}}
-  function updateTransport(){const total=duration(),ratio=total?clamp(state.position/total,0,1):0;el.current.textContent=fmt(state.position);el.duration.textContent=fmt(total);el.seek.value=String(Math.round(ratio*1000));el.seek.style.setProperty('--progress',`${ratio*100}%`);document.querySelectorAll('.playhead').forEach(item=>item.style.left=`${ratio*100}%`);el.glyph.textContent=state.playing?'Ⅱ':'▶';el.play.setAttribute('aria-label',state.playing?'일시정지':'재생');el.play.title=state.playing?'일시정지':'재생';$('previewTrim').textContent=state.playing?'Ⅱ 미리듣기 일시정지':'▶ 시작점 들어보기'}
-  function tick(){if(!state.playing)return;state.position=currentPosition();if(state.position>=duration()&&duration()>0){stopPlayback(true);return}updateTransport();drawViews();state.raf=requestAnimationFrame(tick)}
-  async function play(){if(!duration()){toast('먼저 오디오 또는 MIDI 파일을 추가하세요.');return}if(state.playing)return;if(state.position>=duration())state.position=0;const ctx=ensureContext();if(ctx?.state==='suspended')await ctx.resume();state.playing=true;state.startedPosition=state.position;state.startedAt=performance.now();if(state.audioFile&&state.position<audioLength()){audio.currentTime=clamp(state.audioTrimStart+state.position,0,state.audioSourceDuration-.01);audio.playbackRate=state.speed;try{await audio.play()}catch(e){toast('오디오를 재생하지 못했습니다. 파일 형식을 확인해 주세요.')}}if(!state.playing)return;state.startedPosition=state.audioFile&&state.position<audioLength()&&!audio.paused?Math.max(0,audio.currentTime-state.audioTrimStart):state.position;state.startedAt=performance.now();state.nextNote=noteIndexAt(state.startedPosition);sustainAt(state.startedPosition);state.timer=setInterval(schedule,60);schedule();tick();updateTransport()}
-  function pause(){if(!state.playing)return;state.position=currentPosition();state.playing=false;audio.pause();clearInterval(state.timer);cancelAnimationFrame(state.raf);stopNotes();updateTransport();drawViews()}
-  function stopPlayback(ended=false){pause();state.position=ended?duration():0;audio.pause();if(state.audioFile)audio.currentTime=state.audioTrimStart;updateTransport();drawViews()}
-  function seek(time){state.position=clamp(time,0,duration());if(state.audioFile){const sourceTime=state.audioTrimStart+state.position;if(sourceTime<audioSourceEnd()){audio.currentTime=sourceTime;if(state.playing&&audio.paused)audio.play().catch(()=>{})}else{audio.pause();audio.currentTime=Math.max(0,state.audioSourceDuration-.01)}}if(state.playing){stopNotes();state.startedPosition=state.position;state.startedAt=performance.now();state.nextNote=noteIndexAt(state.position);sustainAt(state.position)}updateTransport();drawViews()}
-  function audioSourceEnd(){return Math.max(0,state.audioSourceDuration-.01)}
-  function setSpeed(value){if(state.playing){state.position=currentPosition();state.startedPosition=state.position;state.startedAt=performance.now();stopNotes()}state.speed=value;audio.playbackRate=value;state.nextNote=noteIndexAt(state.position);if(state.playing)sustainAt(state.position);refreshSummary()}
+  function stopNotes(){for(const track of midiTracks())track.piano?.releaseAll(Tone.immediate())}
+  function stopTrackNotes(id){trackById(id)?.piano?.releaseAll(Tone.immediate())}
+  function soundNote(note,when,seconds){
+    const track=trackById(note.sourceTrack);
+    if(!track||track.muted||!state.pianoBuffers)return;
+    if(!track.piano)track.piano=createPiano();
+    track.piano.triggerAttackRelease(pianoNote(note.pitch),seconds,when,clamp(note.velocity/127,.05,1));
+  }
+  function schedule(){if(!state.playing||!state.pianoBuffers||!state.notes.length)return;const now=currentPosition(),ahead=now+.24*state.speed;while(state.nextNote<state.notes.length&&state.notes[state.nextNote].start<ahead){const note=state.notes[state.nextNote++];if(note.end<=now)continue;const when=Tone.immediate()+Math.max(0,(note.start-now)/state.speed);soundNote(note,when,Math.max(.06,note.end-Math.max(now,note.start))/state.speed)}}
+  function sustainAt(time){if(!state.pianoBuffers)return;for(const note of state.notes){if(note.start<time&&note.end>time)soundNote(note,Tone.immediate()+.01,(note.end-time)/state.speed)}}
+  function updateTransport(){const total=duration(),ratio=total?clamp(state.position/total,0,1):0;el.current.textContent=fmt(state.position);el.duration.textContent=fmt(total);el.seek.value=String(Math.round(ratio*1000));el.seek.style.setProperty('--progress',`${ratio*100}%`);document.querySelectorAll('.playhead').forEach(item=>item.style.left=`${ratio*100}%`);el.glyph.textContent=state.playing?'Ⅱ':'▶';el.play.setAttribute('aria-label',state.playing?'일시정지':'재생');el.play.title=state.playing?'일시정지':'재생';$('previewTrim').textContent=state.playing?'Ⅱ 미리듣기 일시정지':'▶ 시작점 들어보기';updatePracticeTransport()}
+  function syncAudioPlayback(){const position=currentPosition();for(const track of audioTracks())if(track.file){const sourceTime=audioSourceTime(track,position),active=sourceTime>=track.trimStart&&sourceTime<track.sourceDuration-.01;if(active){if(track.audio.paused){track.audio.currentTime=clamp(sourceTime,0,Math.max(0,track.sourceDuration-.01));track.audio.playbackRate=state.speed;track.audio.play().catch(()=>{})}}else{track.audio.pause();if(sourceTime<track.trimStart)track.audio.currentTime=track.trimStart}}}
+  function tick(){if(!state.playing)return;state.position=currentPosition();if(state.position>=duration()&&duration()>0){stopPlayback(true);return}syncAudioPlayback();updateTransport();drawViews();state.raf=requestAnimationFrame(tick)}
+  async function play(){
+    if(!duration()){toast('먼저 오디오 또는 MIDI 파일을 추가하세요.');return}
+    if(state.playing)return;
+    const startId=++state.playStartId;
+    if(state.position>=duration())state.position=0;
+    const ctx=ensureContext();if(ctx?.state==='suspended')await ctx.resume();
+    if(startId!==state.playStartId)return;
+    if(state.notes.length){
+      try{await preparePiano()}catch(error){if(startId===state.playStartId)toast(error.message||'피아노 샘플을 불러오지 못했습니다.');return}
+      if(startId!==state.playStartId)return;
+    }
+    state.playing=true;state.startedPosition=state.position;state.startedAt=performance.now();
+    await Promise.all(audioTracks().filter(track=>track.file&&audioSourceTime(track,state.position)<track.sourceDuration).map(async track=>{
+      const sourceTime=audioSourceTime(track,state.position);
+      if(sourceTime<track.trimStart){track.audio.pause();track.audio.currentTime=track.trimStart;return}
+      track.audio.currentTime=clamp(sourceTime,0,Math.max(0,track.sourceDuration-.01));
+      track.audio.playbackRate=state.speed;
+      try{await track.audio.play()}catch(e){toast(`${track.file.name} 오디오를 재생하지 못했습니다.`)}
+    }));
+    if(!state.playing)return;
+    const master=audioTracks().find(track=>track.file&&!track.audio.paused);
+    if(master)state.position=clamp(master.audio.currentTime-master.trimStart+master.leadIn,0,duration());
+    state.startedPosition=state.position;
+    state.startedAt=performance.now();state.nextNote=noteIndexAt(state.position);sustainAt(state.position);
+    state.timer=setInterval(schedule,60);schedule();resetMetronomeClock();tick();updateTransport();
+  }
+  function pause(){state.playStartId++;if(!state.playing)return;state.position=currentPosition();stopRecording(state.position);state.playing=false;for(const track of audioTracks())track.audio?.pause();clearInterval(state.timer);cancelAnimationFrame(state.raf);stopNotes();resetMetronomeClock(true);updateTransport();drawViews()}
+  function stopPlayback(ended=false){pause();state.position=ended?duration():0;for(const track of audioTracks()){track.audio?.pause();if(track.file)track.audio.currentTime=track.trimStart}updateTransport();drawViews()}
+  function seek(time){
+    if(state.recording)finishRecordingNotes(currentPosition());
+    state.position=clamp(time,0,duration());
+    for(const track of audioTracks())if(track.file){
+      const sourceTime=audioSourceTime(track,state.position);
+      if(sourceTime<track.trimStart){track.audio.pause();track.audio.currentTime=track.trimStart}
+      else if(sourceTime<track.sourceDuration-.01){track.audio.currentTime=sourceTime;if(state.playing&&track.audio.paused)track.audio.play().catch(()=>{})}
+      else{track.audio.pause();track.audio.currentTime=Math.max(0,track.sourceDuration-.01)}
+    }
+    if(state.playing){stopNotes();state.startedPosition=state.position;state.startedAt=performance.now();state.nextNote=noteIndexAt(state.position);sustainAt(state.position);resetMetronomeClock();if(state.recording)startHeldRecording()}updateTransport();drawViews();
+  }
+  function applyPlaybackSpeed(){
+    if(state.playing){state.position=currentPosition();state.startedPosition=state.position;state.startedAt=performance.now();stopNotes()}
+    state.speed=state.speedFactor*(state.originalBpm?state.gridBpm/state.originalBpm:1);
+    for(const track of audioTracks())track.audio.playbackRate=state.speed;
+    state.nextNote=noteIndexAt(state.position);
+    if(state.playing)sustainAt(state.position);
+    resetMetronomeClock();
+  }
+  function setSpeed(value){state.speedFactor=value;applyPlaybackSpeed();refreshSummary()}
 
-  async function loadAudio(file){if(!/\.(mp3|wav)$/i.test(file.name)&&!['audio/mpeg','audio/mp3','audio/wav','audio/x-wav','audio/wave'].includes(file.type)){toast('MP3 또는 WAV 파일을 선택해 주세요.');return}pause();if(state.audioUrl)URL.revokeObjectURL(state.audioUrl);state.audioFile=file;state.audioUrl=URL.createObjectURL(file);state.audioSourceDuration=0;state.audioTrimStart=0;state.wavePeaks=null;state.position=0;audio.src=state.audioUrl;audio.load();el.audioInput.value='';refreshSummary();try{if(file.size<45000000){const ctx=ensureContext();if(ctx){const buffer=await ctx.decodeAudioData(await file.arrayBuffer());if(state.audioFile!==file)return;state.audioSourceDuration=buffer.duration;const data=buffer.getChannelData(0),samples=600,step=Math.max(1,Math.floor(data.length/samples)),peaks=[];for(let i=0;i<samples;i++){let maximum=0;const end=Math.min(data.length,(i+1)*step);for(let j=i*step;j<end;j+=Math.max(1,Math.floor(step/75)))maximum=Math.max(maximum,Math.abs(data[j]));peaks.push(maximum)}state.wavePeaks=peaks;refreshSummary()}}}catch(e){/* The audio element can still play a file whose waveform cannot be decoded. */}}
+  async function loadAudio(file,trackId){
+    const track=trackById(trackId);if(!track||track.type!=='audio')return;
+    if(!/\.(mp3|wav)$/i.test(file.name)&&!['audio/mpeg','audio/mp3','audio/wav','audio/x-wav','audio/wave'].includes(file.type)){toast('MP3 또는 WAV 파일을 선택해 주세요.');return}
+    pause();if(track.url)URL.revokeObjectURL(track.url);
+    track.file=file;track.url=URL.createObjectURL(file);track.sourceDuration=0;track.trimStart=0;track.leadIn=0;track.wavePeaks=null;
+    track.audio.src=track.url;track.audio.load();el.audioInput.value='';state.fileTarget=null;refreshSummary();
+    try{if(file.size<45000000){const ctx=ensureContext();if(ctx){const buffer=await ctx.decodeAudioData(await file.arrayBuffer());if(track.file!==file)return;track.sourceDuration=buffer.duration;const data=buffer.getChannelData(0),samples=600,step=Math.max(1,Math.floor(data.length/samples)),peaks=[];for(let i=0;i<samples;i++){let maximum=0;const end=Math.min(data.length,(i+1)*step);for(let j=i*step;j<end;j+=Math.max(1,Math.floor(step/75)))maximum=Math.max(maximum,Math.abs(data[j]));peaks.push(maximum)}track.wavePeaks=peaks;refreshSummary()}}}catch(e){/* Audio can still play when waveform decoding is unavailable. */}
+  }
   function readVariable(view,cursor){let value=0,byte,count=0;do{if(cursor.i>=view.byteLength)throw Error('MIDI 파일이 중간에서 끝났습니다.');byte=view.getUint8(cursor.i++);value=(value<<7)|(byte&127);if(++count>4)throw Error('잘못된 MIDI 길이입니다.')}while(byte&128);return value}
   function parseMidi(buffer){const view=new DataView(buffer),decoder=new TextDecoder(),ascii=(at,length)=>decoder.decode(new Uint8Array(buffer,at,length));if(view.byteLength<14||ascii(0,4)!=='MThd')throw Error('MIDI 파일 형식을 읽을 수 없습니다.');const headerLength=view.getUint32(4),format=view.getUint16(8),trackCount=view.getUint16(10),ticksPerBeat=view.getUint16(12);if(format>1||(ticksPerBeat&0x8000)||!ticksPerBeat)throw Error('이 MIDI 시간 형식은 아직 지원하지 않습니다.');let position=8+headerLength,notes=[],tempos=[{tick:0,us:500000}],maxTick=0;for(let track=0;track<trackCount;track++){if(position+8>view.byteLength||ascii(position,4)!=='MTrk')throw Error('MIDI 트랙을 읽을 수 없습니다.');const trackEnd=position+8+view.getUint32(position+4);if(trackEnd>view.byteLength)throw Error('MIDI 트랙 데이터가 손상되었습니다.');position+=8;let tick=0,running=0;const active=new Map();while(position<trackEnd){const cursor={i:position};tick+=readVariable(view,cursor);position=cursor.i;let status=view.getUint8(position);if(status<128){if(!running)throw Error('MIDI 이벤트 상태가 잘못되었습니다.');status=running}else{position++;if(status<0xF0)running=status}if(status===0xFF){const type=view.getUint8(position++),lengthCursor={i:position},length=readVariable(view,lengthCursor);position=lengthCursor.i;if(position+length>trackEnd)throw Error('MIDI 메타 데이터가 손상되었습니다.');if(type===0x51&&length===3)tempos.push({tick,us:(view.getUint8(position)<<16)|(view.getUint8(position+1)<<8)|view.getUint8(position+2)});position+=length;continue}if(status===0xF0||status===0xF7){const lengthCursor={i:position},length=readVariable(view,lengthCursor);position=lengthCursor.i+length;if(position>trackEnd)throw Error('MIDI 시스템 데이터가 손상되었습니다.');continue}const kind=status&0xF0,channel=status&15;if(kind===0xC0||kind===0xD0){position++;continue}if(position+2>trackEnd)throw Error('MIDI 이벤트가 손상되었습니다.');const pitch=view.getUint8(position++),velocity=view.getUint8(position++);if(channel===9)continue;const key=`${channel}:${pitch}`;if(kind===0x90&&velocity>0){const stack=active.get(key)||[];stack.push({tick,pitch,velocity,track});active.set(key,stack)}else if(kind===0x80||(kind===0x90&&velocity===0)){const stack=active.get(key);if(stack?.length){const on=stack.shift();notes.push({...on,endTick:Math.max(tick,on.tick+1)})}}}maxTick=Math.max(maxTick,tick);for(const stack of active.values())for(const on of stack)notes.push({...on,endTick:Math.max(tick,on.tick+1)});position=trackEnd}tempos.sort((a,b)=>a.tick-b.tick);let seconds=0;const tempoPoints=tempos.map((tempo,index)=>{if(index)seconds+=(tempo.tick-tempos[index-1].tick)*tempos[index-1].us/(ticksPerBeat*1000000);return {...tempo,sec:seconds}});function tickToSeconds(tick){let low=0,high=tempoPoints.length-1;while(low<high){const mid=Math.ceil((low+high)/2);if(tempoPoints[mid].tick<=tick)low=mid;else high=mid-1}const point=tempoPoints[low];return point.sec+(tick-point.tick)*point.us/(ticksPerBeat*1000000)}const trackPitches=new Map();for(const note of notes){const pitches=trackPitches.get(note.track)||[];pitches.push(note.pitch);trackPitches.set(note.track,pitches)}const ranked=[...trackPitches].map(([track,pitches])=>({track,average:pitches.reduce((a,b)=>a+b,0)/pitches.length})).sort((a,b)=>a.average-b.average);const leftTracks=new Set(ranked.length>1?ranked.slice(0,Math.ceil(ranked.length/2)).map(item=>item.track):[]);const converted=notes.map(note=>({start:tickToSeconds(note.tick),end:tickToSeconds(note.endTick),pitch:note.pitch,velocity:note.velocity,hand:leftTracks.size?(leftTracks.has(note.track)?'left':'right'):(note.pitch<60?'left':'right')})).sort((a,b)=>a.start-b.start);return {notes:converted,tailDuration:tickToSeconds(maxTick),bpm:Math.round(60000000/(tempos.filter(item=>item.tick===0).at(-1)?.us||500000)),tempoPoints,ticksPerBeat}}
-  async function loadMidi(file){if(!/\.(mid|midi)$/i.test(file.name)){toast('MIDI(.mid 또는 .midi) 파일을 선택해 주세요.');return}try{const parsed=parseMidi(await file.arrayBuffer());pause();state.midiFile=file;state.notes=parsed.notes.map(note=>({...note,id:state.nextId++}));state.midiTailDuration=parsed.tailDuration;state.bpm=parsed.bpm;state.tempoPoints=parsed.tempoPoints;state.ticksPerBeat=parsed.ticksPerBeat;state.history=[];state.selectedNoteId=null;recalculateMidiDuration();if(state.position>duration())state.position=0;el.midiInput.value='';refreshSummary();toast(`${state.notes.length.toLocaleString('ko-KR')}개 음표를 불러왔습니다.`)}catch(error){toast(error.message||'MIDI 파일을 읽지 못했습니다.')}}
+  function syncMidiMetadata(){
+    const primary=midiTracks().find(track=>track.file);
+    state.midiFile=primary?.file||null;
+    state.tempoPoints=primary?.tempoPoints||[];
+    state.ticksPerBeat=primary?.ticksPerBeat||480;
+    state.midiTailDuration=Math.max(0,...midiTracks().map(track=>track.tailDuration||0));
+    if(!state.originalBpmManual)state.originalBpm=primary?.bpm||null;
+    if(!state.gridBpmManual)state.gridBpm=state.originalBpm||120;
+    applyPlaybackSpeed();
+  }
+  async function loadMidi(file,trackId){
+    const track=trackById(trackId);if(!track||track.type!=='midi')return;
+    if(!/\.(mid|midi)$/i.test(file.name)){toast('MIDI(.mid 또는 .midi) 파일을 선택해 주세요.');return}
+    try{
+      const parsed=parseMidi(await file.arrayBuffer());
+      pause();
+      state.notes=state.notes.filter(note=>note.sourceTrack!==trackId);
+      state.notes.push(...parsed.notes.map(note=>({...note,id:state.nextId++,sourceTrack:trackId})));
+      Object.assign(track,{file,tailDuration:parsed.tailDuration,bpm:parsed.bpm,tempoPoints:parsed.tempoPoints,ticksPerBeat:parsed.ticksPerBeat});
+      state.selectedTrack=trackId;
+      state.selectedNoteId=null;
+      state.history=[];
+      syncMidiMetadata();recalculateMidiDuration();
+      el.midiInput.value='';state.fileTarget=null;
+      if(state.position>duration())state.position=0;
+      refreshSummary();
+      toast(`MIDI · ${parsed.notes.length.toLocaleString('ko-KR')}개 음표를 불러왔습니다.`);
+    }catch(error){toast(error.message||'MIDI 파일을 읽지 못했습니다.')}
+  }
   function recalculateMidiDuration(){state.notes.sort((a,b)=>a.start-b.start||a.pitch-b.pitch);state.midiDuration=state.notes.reduce((max,note)=>Math.max(max,note.end),state.midiTailDuration)}
-  function editNotes(change){state.history.push({notes:state.notes.map(note=>({...note})),selected:state.selectedNoteId});if(state.history.length>20)state.history.shift();change();recalculateMidiDuration();state.nextNote=noteIndexAt(state.position);refreshSummary();renderEditor()}
-  function transpose(amount){if(!state.midiFile)return;if(state.notes.some(note=>note.pitch+amount<0||note.pitch+amount>127)){toast('MIDI 음역 범위를 벗어나 조옮김할 수 없습니다.');return}editNotes(()=>state.notes.forEach(note=>note.pitch+=amount));if(state.selectedNoteId!==null)selectNote(state.selectedNoteId);toast(amount>0?'전체 음을 반음 높였습니다.':'전체 음을 반음 낮췄습니다.')}
-  function undoMidi(){const previous=state.history.pop();if(!previous){toast('되돌릴 편집이 없습니다.');return}state.notes=previous.notes;state.selectedNoteId=previous.selected;recalculateMidiDuration();refreshSummary();if(state.selectedNoteId!==null)selectNote(state.selectedNoteId);else clearNoteSelection();toast('마지막 편집을 되돌렸습니다.')}
+  function pushHistory(){state.history.push({notes:state.notes.map(note=>({...note})),selected:state.selectedNoteId,track:state.selectedTrack});if(state.history.length>20)state.history.shift()}
+  function editNotes(change){pushHistory();change();recalculateMidiDuration();state.nextNote=noteIndexAt(state.position);refreshSummary();renderEditor()}
+  function transpose(amount){if(!state.midiFile)return;if(state.notes.some(note=>note.pitch+amount<0||note.pitch+amount>127)){toast('MIDI 음역 범위를 벗어나 조옮김할 수 없습니다.');return}editNotes(()=>state.notes.forEach(note=>note.pitch+=amount));updateSelectedInfo();toast(amount>0?'전체 음을 반음 높였습니다.':'전체 음을 반음 낮췄습니다.')}
+  function undoMidi(){const previous=state.history.pop();if(!previous){toast('되돌릴 편집이 없습니다.');return}state.notes=previous.notes;state.selectedNoteId=previous.selected;state.selectedTrack=previous.track;recalculateMidiDuration();refreshSummary();renderEditor();toast('마지막 편집을 되돌렸습니다.')}
+
   function variableBytes(value){let buffer=value&127;const bytes=[];while((value>>=7)>0){buffer<<=8;buffer|=((value&127)|128)}while(true){bytes.push(buffer&255);if(buffer&128)buffer>>=8;else break}return bytes}
   function chunk(type,body){const length=body.length;return [...type.split('').map(char=>char.charCodeAt(0)),(length>>>24)&255,(length>>>16)&255,(length>>>8)&255,length&255,...body]}
   function secondsToTick(seconds){const points=state.tempoPoints;let index=0;for(let i=1;i<points.length&&points[i].sec<=seconds;i++)index=i;const point=points[index]||{sec:0,tick:0,us:500000};return Math.max(0,Math.round(point.tick+(seconds-point.sec)*state.ticksPerBeat*1000000/point.us))}
   function midiTrack(events){events.sort((a,b)=>a.tick-b.tick||a.order-b.order);let previous=0,body=[];for(const event of events){body.push(...variableBytes(event.tick-previous),...event.bytes);previous=event.tick}body.push(0,0xFF,0x2F,0);return chunk('MTrk',body)}
-  function exportMidi(){if(!state.midiFile)return;const tempoByTick=new Map();for(const point of state.tempoPoints)tempoByTick.set(point.tick,point.us);const tempoEvents=[...tempoByTick].map(([tick,us])=>({tick,order:0,bytes:[0xFF,0x51,3,(us>>>16)&255,(us>>>8)&255,us&255]}));const right=[{tick:0,order:0,bytes:[0xC0,0]}],left=[{tick:0,order:0,bytes:[0xC1,0]}];for(const note of state.notes){const start=secondsToTick(note.start),end=Math.max(start+1,secondsToTick(note.end)),channel=note.hand==='left'?1:0,target=note.hand==='left'?left:right;target.push({tick:start,order:2,bytes:[0x90|channel,note.pitch,clamp(Math.round(note.velocity),1,127)]},{tick:end,order:1,bytes:[0x80|channel,note.pitch,0]})}const header=chunk('MThd',[0,1,0,3,(state.ticksPerBeat>>>8)&255,state.ticksPerBeat&255]);const bytes=new Uint8Array([...header,...midiTrack(tempoEvents),...midiTrack(right),...midiTrack(left)]);const url=URL.createObjectURL(new Blob([bytes],{type:'audio/midi'})),link=document.createElement('a');link.href=url;link.download=(state.midiFile.name.replace(/\.(mid|midi)$/i,'')||'keyboard')+'-edited.mid';document.body.append(link);link.click();link.remove();setTimeout(()=>URL.revokeObjectURL(url),1000);toast('편집한 MIDI를 다운로드했습니다.')}
+  function exportMidi(){
+    if(!state.midiFile)return;
+    const tempoByTick=new Map();for(const point of state.tempoPoints)tempoByTick.set(point.tick,point.us);
+    const tempoEvents=[...tempoByTick].map(([tick,us])=>({tick,order:0,bytes:[0xFF,0x51,3,(us>>>16)&255,(us>>>8)&255,us&255]}));
+    const tracks=midiTracks().filter(track=>track.file);
+    const bodies=tracks.map((track,index)=>{
+      const channel=index%15>=9?index%15+1:index%15,events=[{tick:0,order:0,bytes:[0xC0|channel,0]}];
+      for(const note of state.notes.filter(item=>item.sourceTrack===track.id)){
+        const start=secondsToTick(note.start),end=Math.max(start+1,secondsToTick(note.end));
+        events.push({tick:start,order:2,bytes:[0x90|channel,note.pitch,clamp(Math.round(note.velocity),1,127)]},{tick:end,order:1,bytes:[0x80|channel,note.pitch,0]});
+      }
+      return midiTrack(events);
+    });
+    const count=bodies.length+1,header=chunk('MThd',[0,1,(count>>>8)&255,count&255,(state.ticksPerBeat>>>8)&255,state.ticksPerBeat&255]);
+    const bytes=new Uint8Array([...header,...midiTrack(tempoEvents),...bodies.flat()]);
+    const url=URL.createObjectURL(new Blob([bytes],{type:'audio/midi'})),link=document.createElement('a');link.href=url;link.download=(state.midiFile.name.replace(/\.(mid|midi)$/i,'')||'keyboard')+'-edited.mid';document.body.append(link);link.click();link.remove();setTimeout(()=>URL.revokeObjectURL(url),1000);toast('편집한 MIDI를 다운로드했습니다.');
+  }
+
+  function renderPerformanceStatus(){
+    const count=state.performanceNotes.length;
+    el.recordPerformance.disabled=!state.midiInput||(!duration()&&!state.recording);
+    el.recordPerformance.setAttribute('aria-pressed',String(state.recording));
+    el.recordPerformance.textContent=state.recording?'■ 기록 끝내기':'● 연주 기록';
+    el.clearPerformance.disabled=!count||state.recording;
+    el.downloadPerformance.disabled=!count||state.recording;
+    el.performanceStatus.textContent=state.recording?`기록 중 · ${count}개 음표 (재생을 멈추면 기록도 멈춥니다)`:count?`${count}개 음표 기록됨 · 주황색으로 가이드와 겹쳐 표시`:'재생 중 연주를 기록하면 가이드 위에 주황색으로 표시됩니다.';
+  }
+  function finishRecordedNote(key,end){
+    const note=state.recordingNotes.get(key);if(!note)return;
+    state.recordingNotes.delete(key);
+    state.performanceNotes.push({...note,end:Math.max(note.start+.01,end)});
+    if(state.performanceNotes.length>10000)state.performanceNotes.shift();
+    renderPerformanceStatus();renderPracticeOverview();drawViews();
+  }
+  function finishRecordingNotes(end){for(const key of [...state.recordingNotes.keys()])finishRecordedNote(key,end)}
+  function startHeldRecording(){for(const [key,note] of state.heldNotes)state.recordingNotes.set(key,{start:currentPosition(),pitch:note.pitch,velocity:note.velocity})}
+  function stopRecording(end=currentPosition()){
+    if(!state.recording)return;
+    finishRecordingNotes(end);state.recording=false;renderPerformanceStatus();
+  }
+  async function toggleRecording(){
+    if(state.recording){stopRecording();return}
+    if(!state.midiInput){toast('먼저 전자피아노를 연결하세요.');return}
+    if(!duration()){toast('기록을 위해 원곡 오디오 또는 가이드 MIDI를 추가하세요.');return}
+    if(!state.playing)await play();
+    if(!state.playing)return;
+    state.recording=true;startHeldRecording();renderPerformanceStatus();
+  }
+  function renderLiveNotes(){
+    const notes=[...state.heldNotes.values()].sort((a,b)=>a.pitch-b.pitch);
+    el.liveNotes.replaceChildren();
+    if(!notes.length){const empty=document.createElement('span');empty.className='midi-live-empty';empty.textContent='건반을 누르면 음이 표시됩니다.';el.liveNotes.appendChild(empty)}
+    else for(const note of notes){const chip=document.createElement('span');chip.className='midi-live-note';chip.textContent=noteName(note.pitch);el.liveNotes.appendChild(chip)}
+    el.liveNoteText.textContent=notes.length?`누르는 음: ${notes.map(note=>noteName(note.pitch)).join(', ')}`:'누르는 음 없음';
+    drawViews();
+  }
+  function releaseHeldNotes(){
+    finishRecordingNotes(currentPosition());state.heldNotes.clear();renderLiveNotes();
+    state.livePiano?.releaseAll(Tone.immediate());
+  }
+  function releaseLivePitch(pitch){
+    if(![...state.heldNotes.values()].some(note=>note.pitch===pitch))state.livePiano?.triggerRelease(pianoNote(pitch),Tone.immediate());
+  }
+  function handleMidiMessage(event){
+    const data=event.data;if(!data||data.length<2)return;
+    const command=data[0]&0xF0,channel=data[0]&0x0F,pitch=data[1],velocity=data[2]||0;
+    if((command===0x90||command===0x80)&&data.length>=3&&pitch<=127){
+      const key=`${channel}:${pitch}`;
+      if(command===0x90&&velocity>0){
+        finishRecordedNote(key,currentPosition());
+        if(state.heldNotes.has(key))state.livePiano?.triggerRelease(pianoNote(pitch),Tone.immediate());
+        state.heldNotes.set(key,{pitch,velocity});
+        state.livePiano?.triggerAttack(pianoNote(pitch),Tone.immediate(),clamp(velocity/127,.05,1));
+        if(state.recording&&state.playing)state.recordingNotes.set(key,{start:currentPosition(),pitch,velocity});
+      }else{
+        state.heldNotes.delete(key);finishRecordedNote(key,currentPosition());releaseLivePitch(pitch);
+      }
+      renderLiveNotes();
+    }else if(command===0xB0&&(pitch===120||pitch===123)){
+      for(const key of [...state.heldNotes.keys()])if(key.startsWith(`${channel}:`)){
+        const held=state.heldNotes.get(key);
+        state.heldNotes.delete(key);finishRecordedNote(key,currentPosition());
+        releaseLivePitch(held.pitch);
+      }
+      renderLiveNotes();
+    }
+  }
+  function selectMidiInput(id){
+    const input=[...state.midiAccess.inputs.values()].find(item=>item.id===id&&item.state==='connected')||null;
+    if(state.midiInput===input){if(!input){el.midiStatus.textContent='입력 장치를 찾지 못했습니다. USB 연결과 전원을 확인하세요.';refreshSummary()}return}
+    stopRecording();releaseHeldNotes();
+    if(state.midiInput)state.midiInput.removeEventListener('midimessage',handleMidiMessage);
+    state.midiInput=input;state.midiInputId=input?.id||'';
+    if(input&&!state.livePiano)state.livePiano=createPiano();
+    if(input)input.addEventListener('midimessage',handleMidiMessage);
+    el.midiDevice.value=state.midiInputId;
+    el.midiStatus.textContent=input?`연결됨 · ${input.name||'MIDI 입력'} (입력 음은 서버로 전송되지 않습니다)`:'입력 장치를 찾지 못했습니다. USB 연결과 전원을 확인하세요.';
+    renderPerformanceStatus();refreshSummary();
+  }
+  function refreshMidiDevices(){
+    const inputs=[...state.midiAccess.inputs.values()].filter(input=>input.state==='connected');
+    const preferred=inputs.find(input=>input.id===state.midiInputId)||inputs[0];
+    el.midiDevice.replaceChildren();
+    if(!inputs.length){const option=document.createElement('option');option.value='';option.textContent='연결된 장치 없음';el.midiDevice.appendChild(option)}
+    else for(const input of inputs){const option=document.createElement('option');option.value=input.id;option.textContent=input.name||`MIDI 입력 ${el.midiDevice.options.length+1}`;el.midiDevice.appendChild(option)}
+    el.midiDevice.disabled=!inputs.length;
+    el.midiDevice.value=preferred?.id||'';
+    selectMidiInput(preferred?.id||'');
+  }
+  async function connectMidi(){
+    if(!navigator.requestMIDIAccess||!window.isSecureContext){el.midiStatus.textContent='Web MIDI를 지원하는 브라우저에서 localhost 또는 HTTPS로 열어 주세요.';return}
+    el.connectMidi.disabled=true;el.midiStatus.textContent='MIDI 장치 접근 권한 요청 중…';
+    try{
+      const [access]=await Promise.all([state.midiAccess||navigator.requestMIDIAccess({sysex:false}),preparePiano()]);
+      if(!state.midiAccess){state.midiAccess=access;state.midiAccess.addEventListener('statechange',refreshMidiDevices)}
+      refreshMidiDevices();el.connectMidi.textContent='장치 다시 찾기';
+    }catch(error){el.midiStatus.textContent=error?.name==='SecurityError'||error?.name==='NotAllowedError'?'MIDI 권한이 거부되었습니다. 브라우저 사이트 권한을 확인하세요.':error?.message?.includes('Tone.js')||error?.message?.includes('fetch')?'피아노 음원을 불러오지 못했습니다. 페이지를 새로고침해 주세요.':'MIDI 장치 또는 피아노 음원을 연결할 수 없습니다. 브라우저와 USB 연결을 확인하세요.'}
+    finally{el.connectMidi.disabled=false}
+  }
+  function downloadPerformance(){
+    if(!state.performanceNotes.length)return;
+    const tempos=new Map();for(const point of state.tempoPoints)tempos.set(point.tick,point.us);
+    if(!tempos.size)tempos.set(0,500000);
+    const tempoEvents=[...tempos].map(([tick,us])=>({tick,order:0,bytes:[0xFF,0x51,3,(us>>>16)&255,(us>>>8)&255,us&255]}));
+    const events=[{tick:0,order:0,bytes:[0xC0,0]}];
+    for(const note of state.performanceNotes){const start=secondsToTick(note.start),end=Math.max(start+1,secondsToTick(note.end));events.push({tick:start,order:2,bytes:[0x90,note.pitch,clamp(note.velocity,1,127)]},{tick:end,order:1,bytes:[0x80,note.pitch,0]})}
+    const count=2,header=chunk('MThd',[0,1,0,count,(state.ticksPerBeat>>>8)&255,state.ticksPerBeat&255]);
+    const bytes=new Uint8Array([...header,...midiTrack(tempoEvents),...midiTrack(events)]);
+    const url=URL.createObjectURL(new Blob([bytes],{type:'audio/midi'})),link=document.createElement('a');link.href=url;link.download='my-performance.mid';document.body.append(link);link.click();link.remove();setTimeout(()=>URL.revokeObjectURL(url),1000);
+  }
 
   function sizeCanvas(canvas){const box=canvas.getBoundingClientRect();if(!box.width||!box.height)return null;const ratio=Math.min(window.devicePixelRatio||1,2),width=Math.round(box.width*ratio),height=Math.round(box.height*ratio);if(canvas.width!==width||canvas.height!==height){canvas.width=width;canvas.height=height}const ctx=canvas.getContext('2d');ctx.setTransform(ratio,0,0,ratio,0,0);return {ctx,width:box.width,height:box.height}}
-  function drawWave(){const canvas=sizeCanvas(el.wave);if(!canvas)return;const {ctx,width,height}=canvas;ctx.clearRect(0,0,width,height);if(!state.audioFile)return;const available=duration(),trackWidth=available?width*audioLength()/available:width,peaks=state.wavePeaks;if(!peaks){ctx.fillStyle='#b88468';ctx.fillRect(0,height/2,trackWidth,2);return}const trimIndex=Math.floor(state.audioTrimStart/state.audioSourceDuration*peaks.length),visible=peaks.length-trimIndex;ctx.fillStyle='#bfe5b7';for(let i=trimIndex;i<peaks.length;i++){const x=(i-trimIndex)*trackWidth/visible,bar=Math.max(2,peaks[i]*(height-26));ctx.globalAlpha=.6+peaks[i]*.4;ctx.fillRect(x,height/2-bar/2,Math.max(1,trackWidth/visible*.75),bar)}ctx.globalAlpha=1}
-  function drawTrimWave(){const canvas=sizeCanvas(el.trimWave);if(!canvas)return;const {ctx,width,height}=canvas;ctx.clearRect(0,0,width,height);ctx.fillStyle='#233126';ctx.fillRect(0,0,width,height);const peaks=state.wavePeaks;if(peaks){ctx.fillStyle='#addb9b';for(let i=0;i<peaks.length;i++){const x=i*width/peaks.length,bar=Math.max(2,peaks[i]*(height-20));ctx.fillRect(x,height/2-bar/2,Math.max(1,width/peaks.length*.8),bar)}}else{ctx.fillStyle='#759579';ctx.fillRect(0,height/2,width,2)}const marker=state.audioSourceDuration?state.audioTrimStart/state.audioSourceDuration*width:0;ctx.fillStyle='#0d110dbb';ctx.fillRect(0,0,marker,height);ctx.fillStyle='#e7b788';ctx.fillRect(marker-1,0,2,height)}
-  function drawMidiOverview(){el.midiOverview.replaceChildren();if(!state.midiFile)return;const fragment=document.createDocumentFragment(),limit=Math.min(state.notes.length,1800),step=Math.max(1,Math.floor(state.notes.length/Math.max(1,limit)));let minimum=127,maximum=0;for(const note of state.notes){minimum=Math.min(minimum,note.pitch);maximum=Math.max(maximum,note.pitch)}if(maximum===minimum)maximum=minimum+1;const total=Math.max(duration(),.01);for(let i=0;i<state.notes.length;i+=step){const note=state.notes[i],item=document.createElement('i');item.className='mini-note'+(note.hand==='left'?' low':'');item.style.left=`${note.start/total*100}%`;item.style.width=`${Math.max(.25,(note.end-note.start)/total*100)}%`;item.style.top=`${(note.hand==='left'?54:17)+(maximum-note.pitch)/(maximum-minimum)*27}%`;fragment.appendChild(item)}el.midiOverview.appendChild(fragment)}
-  function pitchRange(){if(!state.notes.length)return {low:48,high:84};let low=127,high=0;for(const note of state.notes){low=Math.min(low,note.pitch);high=Math.max(high,note.pitch)}low=Math.max(21,Math.floor((low-2)/12)*12);high=Math.min(108,Math.ceil((high+3)/12)*12);if(high-low<24)high=Math.min(108,low+24);return {low,high}}
-  function drawFall(){const canvas=sizeCanvas(el.fall);if(!canvas)return;const {ctx,width,height}=canvas;ctx.clearRect(0,0,width,height);if(!state.midiFile)return;const {low,high}=pitchRange(),count=high-low+1,keyHeight=55,hitY=height-keyHeight,keyWidth=width/count,scale=56;ctx.fillStyle='#19231c';ctx.fillRect(0,0,width,hitY);for(let pitch=low;pitch<=high;pitch++){const x=(pitch-low)*keyWidth;ctx.fillStyle=blackKeys.has(pitch%12)?'#1d2a20':'#243029';ctx.fillRect(x,0,keyWidth-1,hitY);ctx.fillStyle=blackKeys.has(pitch%12)?'#323c35':'#354339';ctx.fillRect(x,hitY,keyWidth-1,keyHeight);if(pitch%12===0&&keyWidth>8){ctx.fillStyle='#9cac9b';ctx.font='10px sans-serif';ctx.fillText(noteName(pitch),x+2,height-7)}}ctx.fillStyle='#c9ed6f';ctx.fillRect(0,hitY-2,width,2);for(const note of state.notes){if(note.end<state.position-.12||note.start>state.position+hitY/scale+.2)continue;const x=(note.pitch-low)*keyWidth+1,top=hitY-(note.end-state.position)*scale,bottom=hitY-(note.start-state.position)*scale;ctx.fillStyle=note.hand==='left'?'#73c6bd':'#c9ed6f';ctx.globalAlpha=.91;ctx.fillRect(x,Math.max(0,top),Math.max(2,keyWidth-2),Math.max(5,Math.min(hitY,bottom)-Math.max(0,top)));ctx.globalAlpha=1;if(note.start<=state.position&&note.end>=state.position)ctx.fillRect(x,hitY+2,Math.max(2,keyWidth-2),keyHeight-4)}}
-  function drawRoll(){const canvas=sizeCanvas(el.roll);if(!canvas)return;const {ctx,width,height}=canvas;ctx.clearRect(0,0,width,height);if(!state.midiFile)return;const {low,high}=pitchRange(),count=high-low+1,labelWidth=56,row=height/count,scale=70;ctx.fillStyle='#1a251d';ctx.fillRect(0,0,width,height);for(let pitch=low;pitch<=high;pitch++){const y=(high-pitch)*row;ctx.fillStyle=blackKeys.has(pitch%12)?'#1a241d':'#263129';ctx.fillRect(0,y,width,row-1);ctx.fillStyle='#536b55';ctx.font='11px sans-serif';if(row>8)ctx.fillText(noteName(pitch),6,y+Math.min(row-2,11))}ctx.fillStyle='#19211b';ctx.fillRect(0,0,labelWidth,height);ctx.strokeStyle='#657766';ctx.beginPath();ctx.moveTo(labelWidth,0);ctx.lineTo(labelWidth,height);ctx.stroke();for(let time=Math.ceil(state.position);time<state.position+(width-labelWidth)/scale;time++){const x=labelWidth+(time-state.position)*scale;ctx.fillStyle='#415145';ctx.fillRect(x,0,1,height)}for(const note of state.notes){if(note.end<state.position||note.start>state.position+(width-labelWidth)/scale)continue;const x=labelWidth+(note.start-state.position)*scale,y=(high-note.pitch)*row+.5,noteWidth=Math.max(3,(note.end-note.start)*scale);ctx.fillStyle=note.hand==='left'?'#73c6bd':'#c9ed6f';ctx.fillRect(x,y,noteWidth,Math.max(3,row-1));if(noteWidth>38&&row>11){ctx.fillStyle='#18251c';ctx.font='bold 10px sans-serif';ctx.fillText(noteName(note.pitch),x+4,y+Math.min(row-2,10))}}}
+  function drawWave(track){const canvas=sizeCanvas(track.wave);if(!canvas)return;const {ctx,width,height}=canvas;ctx.clearRect(0,0,width,height);if(!track.file)return;const available=duration(),totalAudio=audioLength(track),trackWidth=available?width*totalAudio/available:width,startX=available?width*(track.leadIn||0)/available:0,peaks=track.wavePeaks;if(!peaks){ctx.fillStyle='#b88468';ctx.fillRect(startX,height/2,trackWidth,2);return}const trimIndex=Math.floor(track.trimStart/track.sourceDuration*peaks.length),visible=peaks.length-trimIndex;ctx.fillStyle='#bfe5b7';for(let i=trimIndex;i<peaks.length;i++){const x=startX+(i-trimIndex)*trackWidth/visible,bar=Math.max(2,peaks[i]*(height-26));ctx.globalAlpha=.6+peaks[i]*.4;ctx.fillRect(x,height/2-bar/2,Math.max(1,trackWidth/visible*.75),bar)}ctx.globalAlpha=1}
+  function drawTrimWave(){const track=trackById(state.selectedAudioTrack),canvas=sizeCanvas(el.trimWave);if(!canvas)return;const {ctx,width,height}=canvas;ctx.clearRect(0,0,width,height);ctx.fillStyle='#233126';ctx.fillRect(0,0,width,height);const peaks=track?.wavePeaks;if(peaks){ctx.fillStyle='#addb9b';for(let i=0;i<peaks.length;i++){const x=i*width/peaks.length,bar=Math.max(2,peaks[i]*(height-20));ctx.fillRect(x,height/2-bar/2,Math.max(1,width/peaks.length*.8),bar)}}else{ctx.fillStyle='#759579';ctx.fillRect(0,height/2,width,2)}const marker=track?.sourceDuration?track.trimStart/track.sourceDuration*width:0;ctx.fillStyle='#0d110dbb';ctx.fillRect(0,0,marker,height);ctx.fillStyle='#e7b788';ctx.fillRect(marker-1,0,2,height)}
+  function drawMidiOverview(){
+    const total=Math.max(duration(),.01);
+    for(const track of midiTracks()){
+      const container=track.overview;
+      container.replaceChildren();
+      if(!track.file)continue;
+      const notes=state.notes.filter(note=>note.sourceTrack===track.id),fragment=document.createDocumentFragment();
+      const limit=Math.min(notes.length,1800),step=Math.max(1,Math.floor(notes.length/Math.max(1,limit)));
+      let minimum=127,maximum=0;
+      for(const note of notes){minimum=Math.min(minimum,note.pitch);maximum=Math.max(maximum,note.pitch)}
+      if(maximum===minimum)maximum=minimum+1;
+      for(let i=0;i<notes.length;i+=step){
+        const note=notes[i],item=document.createElement('i');
+        item.className='mini-note'+(note.hand==='left'?' low':'');
+        item.style.left=`${note.start/total*100}%`;
+        item.style.width=`${Math.max(.25,(note.end-note.start)/total*100)}%`;
+        item.style.top=`${12+(maximum-note.pitch)/(maximum-minimum)*75}%`;
+        fragment.appendChild(item);
+      }
+      container.appendChild(fragment);
+    }
+  }
+
+  function pitchRange(){const notes=[...state.notes,...state.performanceNotes,...state.heldNotes.values()];if(!notes.length)return {low:48,high:84};let low=127,high=0;for(const note of notes){low=Math.min(low,note.pitch);high=Math.max(high,note.pitch)}low=Math.max(0,Math.floor((low-2)/12)*12);high=Math.min(127,Math.ceil((high+3)/12)*12);if(high-low<24)high=Math.min(127,low+24);return {low,high}}
+  function drawFall(){
+    const {low,high}=pitchRange(),count=high-low+1;
+    const viewportWidth=el.fall.parentElement.clientWidth;
+    el.fall.style.width=`${state.midiFile?Math.max(viewportWidth,count*40):viewportWidth}px`;
+    const canvas=sizeCanvas(el.fall);if(!canvas)return;
+    const {ctx,width,height}=canvas,keyHeight=55,hitY=height-keyHeight,keyWidth=width/count,scale=state.fallScale;
+    ctx.clearRect(0,0,width,height);
+    ctx.fillStyle='#19231c';ctx.fillRect(0,0,width,hitY);
+    for(let pitch=low;pitch<=high;pitch++){
+      const x=(pitch-low)*keyWidth,black=blackKeys.has(pitch%12);
+      ctx.fillStyle=black?'#202b23':'#29372c';ctx.fillRect(x,0,keyWidth-1,hitY);
+      const keyX=x+(black?5:1),keyWidthInset=keyWidth-(black?10:2);
+      ctx.fillStyle=black?'#101714':'#f3f5ef';ctx.fillRect(keyX,hitY+1,keyWidthInset,keyHeight-2);
+      ctx.strokeStyle=black?'#9aab9c':'#a8b5a7';ctx.strokeRect(keyX+.5,hitY+1.5,keyWidthInset-1,keyHeight-3);
+      if(pitch%12===0){ctx.fillStyle='#344436';ctx.font='bold 10px sans-serif';ctx.textAlign='center';ctx.fillText(noteName(pitch),x+keyWidth/2,height-7)}
+    }
+    ctx.fillStyle='#c9ed6f';ctx.fillRect(0,hitY-2,width,2);
+    ctx.save();ctx.beginPath();ctx.rect(0,0,width,hitY);ctx.clip();
+    ctx.textAlign='center';ctx.textBaseline='middle';ctx.font='bold 10px sans-serif';
+    for(const note of state.notes){
+      if(note.end<state.position||note.start>state.position+hitY/scale+.2)continue;
+      const black=blackKeys.has(note.pitch%12),x=(note.pitch-low)*keyWidth+(black?5:3),noteWidth=keyWidth-(black?10:6);
+      const top=hitY-(note.end-state.position)*scale,bottom=hitY-(note.start-state.position)*scale;
+      if(bottom<0||top>=hitY)continue;
+      const visibleTop=Math.max(0,top),visibleBottom=Math.min(hitY,bottom);
+      ctx.fillStyle=black?'#101714':'#f7f9f4';ctx.strokeStyle=black?'#bed0c0':'#9bab9a';ctx.lineWidth=1;
+      ctx.fillRect(x,visibleTop,noteWidth,Math.max(4,visibleBottom-visibleTop));
+      ctx.strokeRect(x+.5,visibleTop+.5,noteWidth-1,Math.max(3,visibleBottom-visibleTop-1));
+      const labelY=Math.max(2,visibleTop-17);
+      ctx.fillRect(x,labelY,noteWidth,16);ctx.strokeRect(x+.5,labelY+.5,noteWidth-1,15);
+      ctx.fillStyle=black?'#f7f9f4':'#17221a';ctx.fillText(noteName(note.pitch),x+noteWidth/2,labelY+8);
+    }
+    ctx.restore();
+    for(const note of state.notes){
+      if(note.start>state.position||note.end<state.position)continue;
+      const black=blackKeys.has(note.pitch%12),x=(note.pitch-low)*keyWidth+(black?5:1),keyWidthInset=keyWidth-(black?10:2);
+      ctx.strokeStyle='#c9ed6f';ctx.lineWidth=2;ctx.strokeRect(x+2,hitY+3,keyWidthInset-4,keyHeight-5);
+    }
+    for(const note of state.heldNotes.values()){
+      const black=blackKeys.has(note.pitch%12),x=(note.pitch-low)*keyWidth+(black?5:1),keyWidthInset=keyWidth-(black?10:2);
+      ctx.fillStyle='#ffae72';ctx.globalAlpha=.55;ctx.fillRect(x+2,hitY+3,keyWidthInset-4,keyHeight-5);ctx.globalAlpha=1;
+      ctx.strokeStyle='#ffae72';ctx.lineWidth=3;ctx.strokeRect(x+2,hitY+3,keyWidthInset-4,keyHeight-5);
+    }
+  }
+  function drawRoll(){
+    const canvas=sizeCanvas(el.roll);if(!canvas)return;
+    const {ctx,width,height}=canvas,{low,high}=pitchRange(),count=high-low+1,labelWidth=56,row=height/count,scale=70,position=currentPosition();
+    ctx.clearRect(0,0,width,height);ctx.fillStyle='#1a251d';ctx.fillRect(0,0,width,height);
+    for(let pitch=low;pitch<=high;pitch++){const y=(high-pitch)*row;ctx.fillStyle=blackKeys.has(pitch%12)?'#1a241d':'#263129';ctx.fillRect(0,y,width,row-1);ctx.fillStyle='#536b55';ctx.font='11px sans-serif';if(row>8)ctx.fillText(noteName(pitch),6,y+Math.min(row-2,11))}
+    ctx.fillStyle='#19211b';ctx.fillRect(0,0,labelWidth,height);ctx.strokeStyle='#657766';ctx.beginPath();ctx.moveTo(labelWidth,0);ctx.lineTo(labelWidth,height);ctx.stroke();
+    for(let time=Math.ceil(position);time<position+(width-labelWidth)/scale;time++){const x=labelWidth+(time-position)*scale;ctx.fillStyle='#415145';ctx.fillRect(x,0,1,height)}
+    for(const note of state.notes){
+      if(note.end<position||note.start>position+(width-labelWidth)/scale)continue;
+      const x=labelWidth+(note.start-position)*scale,y=(high-note.pitch)*row+.5,noteWidth=Math.max(3,(note.end-note.start)*scale);
+      ctx.fillStyle=note.hand==='left'?'#73c6bd':'#c9ed6f';ctx.fillRect(x,y,noteWidth,Math.max(3,row-1));
+      if(noteWidth>38&&row>11){ctx.fillStyle='#18251c';ctx.font='bold 10px sans-serif';ctx.fillText(noteName(note.pitch),x+4,y+Math.min(row-2,10))}
+    }
+    for(const note of [...state.performanceNotes,...state.recordingNotes.values()].filter(item=>item.end===undefined?true:item.end>=position)){
+      if(note.start>position+(width-labelWidth)/scale)continue;
+      const end=note.end??position,x=labelWidth+(note.start-position)*scale,y=(high-note.pitch)*row+.5;
+      ctx.fillStyle='#ffad72';ctx.fillRect(Math.max(labelWidth,x),y,Math.max(3,(end-Math.max(position,note.start))*scale),Math.max(3,row-1));
+    }
+    for(const note of state.heldNotes.values()){
+      ctx.fillStyle='#ffd0a1';ctx.fillRect(labelWidth,(high-note.pitch)*row+.5,7,Math.max(3,row-1));
+    }
+  }
   function drawViews(){if(!$('viewOverlay').classList.contains('hidden')){drawFall();drawRoll()}}
-  function renderRuler(){const total=duration()||60;el.ruler.replaceChildren();for(let i=0;i<5;i++){const item=document.createElement('span');item.textContent=fmt(total*i/4);el.ruler.appendChild(item)}}
-  function refreshSummary(){const parts=[];if(state.audioFile)parts.push(`원곡 ${state.audioFile.name}${state.audioTrimStart?` · 앞 ${state.audioTrimStart.toFixed(2)}초 자름`:''}`);if(state.midiFile)parts.push(`MIDI ${state.midiFile.name}`);el.summary.textContent=parts.length?parts.join(' / '):'오디오와 MIDI를 추가하면 함께 재생됩니다.';el.audioDrop.classList.toggle('has-file',!!state.audioFile);el.midiDrop.classList.toggle('has-file',!!state.midiFile);el.audioName.textContent=state.audioFile?.name||'';el.midiName.textContent=state.midiFile?.name||'';el.noteCount.textContent=state.midiFile?`${state.notes.length.toLocaleString('ko-KR')}개 음표`:'MIDI 대기 중';el.fallEmpty.classList.toggle('hidden',!!state.midiFile);el.rollEmpty.classList.toggle('hidden',!!state.midiFile);el.bpm.textContent=state.bpm?String(Math.round(state.bpm*state.speed)):'—';updateTransport();renderRuler();drawWave();drawMidiOverview();drawViews();updateTrimControls()}
+  function updatePracticeTransport(){
+    const total=duration(),position=clamp(state.position,0,total);
+    if(state.practiceFlagTime!==null)state.practiceFlagTime=total>0?clamp(state.practiceFlagTime,0,Math.max(0,total-.01)):null;
+    el.practiceTime.textContent=`${fmt(position)} / ${fmt(total)}`;
+    el.practicePosition.style.left=`${total?position/total*100:0}%`;
+    el.practiceScrub.setAttribute('aria-valuemax',String(Number(total.toFixed(2))));
+    el.practiceScrub.setAttribute('aria-valuenow',String(Number(position.toFixed(2))));
+    el.practiceScrub.setAttribute('aria-valuetext',`${fmt(position)} / ${fmt(total)}`);
+    el.practiceFlag.hidden=state.practiceFlagTime===null;
+    if(state.practiceFlagTime!==null){el.practiceFlag.style.left=`${state.practiceFlagTime/total*100}%`;el.practiceFlag.classList.toggle('near-end',state.practiceFlagTime/total>.82);el.practiceFlag.setAttribute('aria-label',`시작 플래그 ${fmt(state.practiceFlagTime)}. 드래그해서 이동`)}
+    el.placePracticeFlag.disabled=!total;
+    el.clearPracticeFlag.disabled=state.practiceFlagTime===null;
+  }
+  function renderPracticeOverview(){
+    const total=Math.max(duration(),.01),notes=[...state.notes,...state.performanceNotes],container=el.practiceMidiNotes;
+    container.replaceChildren();el.practiceScrubEmpty.classList.toggle('hidden',notes.length>0);
+    drawBeatGrid(el.practiceBeatGrid,0,total,el.practiceScrub.clientWidth);
+    if(!notes.length){updatePracticeTransport();return}
+    let low=127,high=0;for(const note of notes){low=Math.min(low,note.pitch);high=Math.max(high,note.pitch)}
+    const mid=(low+high)/2;low=Math.max(0,Math.min(low,mid-12));high=Math.min(127,Math.max(high,mid+12));
+    const fragment=document.createDocumentFragment(),performed=new Set(state.performanceNotes),limit=1800,step=Math.max(1,Math.ceil(notes.length/limit));
+    for(let i=0;i<notes.length;i+=step){
+      const note=notes[i],bar=document.createElement('i');bar.className='practice-note'+(performed.has(note)?' performed':note.hand==='left'?' low':'');
+      bar.style.left=`${note.start/total*100}%`;bar.style.width=`${Math.max(.18,(note.end-note.start)/total*100)}%`;
+      bar.style.top=`${8+(high-note.pitch)/Math.max(1,high-low)*78}%`;fragment.appendChild(bar);
+    }
+    container.appendChild(fragment);updatePracticeTransport();
+  }
+  function practiceTimeFromPointer(event){const box=el.practiceScrub.getBoundingClientRect();return box.width?clamp((event.clientX-box.left)/box.width,0,1)*duration():0}
+  function setPracticeFlag(time){if(!duration()){toast('먼저 오디오 또는 MIDI 파일을 추가하세요.');return}state.practiceFlagTime=clamp(time,0,Math.max(0,duration()-.01));updatePracticeTransport()}
+  function startPracticeDrag(event,type){if(event.button!==0||!duration())return;event.preventDefault();event.stopPropagation();state.practiceDrag={type,pointerId:event.pointerId};el.practiceScrub.setPointerCapture(event.pointerId);if(type==='flag')setPracticeFlag(practiceTimeFromPointer(event));else seek(practiceTimeFromPointer(event))}
+  function movePracticeDrag(event){if(!state.practiceDrag||state.practiceDrag.pointerId!==event.pointerId)return;if(state.practiceDrag.type==='flag')setPracticeFlag(practiceTimeFromPointer(event));else seek(practiceTimeFromPointer(event))}
+  function endPracticeDrag(event){if(!state.practiceDrag||state.practiceDrag.pointerId!==event.pointerId)return;state.practiceDrag=null;if(el.practiceScrub.hasPointerCapture?.(event.pointerId))el.practiceScrub.releasePointerCapture(event.pointerId)}
+  function secondsToBeat(seconds){
+    if(!state.tempoPoints.length)return seconds*(state.originalBpm||120)/60;
+    let point=state.tempoPoints[0];for(const next of state.tempoPoints){if(next.sec>seconds)break;point=next}
+    return (point.tick+(seconds-point.sec)*state.ticksPerBeat*1000000/point.us)/state.ticksPerBeat;
+  }
+  function beatToSeconds(beat){
+    if(!state.tempoPoints.length)return beat*60/(state.originalBpm||120);
+    const tick=beat*state.ticksPerBeat;let point=state.tempoPoints[0];for(const next of state.tempoPoints){if(next.tick>tick)break;point=next}
+    return point.sec+(tick-point.tick)*point.us/(state.ticksPerBeat*1000000);
+  }
+  function beatGridStep(view,width){const beatPixels=width/view*60/(state.originalBpm||120);return [.25,.5,1,2,4,8,16,32,64,128].find(step=>beatPixels*step>=12)||128}
+  function drawBeatGrid(container,start,view,width,labels){
+    container.replaceChildren();if(!width||!view)return;
+    const step=beatGridStep(view,width),first=Math.ceil((secondsToBeat(start)-.000001)/step)*step;
+    for(let beat=first,count=0;count<600;beat+=step,count++){
+      const time=beatToSeconds(beat);if(time>start+view+.000001)break;if(time<start-.000001)continue;
+      const bar=Math.abs(beat/4-Math.round(beat/4))<.00001,whole=Math.abs(beat-Math.round(beat))<.00001;
+      const line=document.createElement('i');line.className='beat-line'+(bar?' bar':whole?' beat':'');line.style.left=`${(time-start)/view*100}%`;container.appendChild(line);
+      const beatPixels=width/view*60/(state.originalBpm||120);
+      const labelEvery=Math.max(1,Math.ceil(42/(beatPixels*step)));
+      if(labels&&(bar||whole&&step<=1&&beatPixels>46)&&count%labelEvery===0){
+        const mark=document.createElement('span');mark.className='beat-label';mark.style.left=line.style.left;mark.textContent=`${Math.floor(beat/4)+1}.${Math.floor(beat%4)+1}`;labels.appendChild(mark);
+      }
+    }
+  }
+  function renderRuler(){const total=duration()||16;el.ruler.replaceChildren();drawBeatGrid(el.ruler,0,total,el.ruler.clientWidth,el.ruler)}
+  function drawTimelineGrid(){const total=duration()||16;for(const track of state.tracks)drawBeatGrid(track.grid,0,total,track.lane.clientWidth)}
+  function createTrack(type){
+    const id=`track-${state.nextTrackId++}`,track={id,type,file:null,muted:false,trimStart:0,leadIn:0,sourceDuration:0,wavePeaks:null,tailDuration:0};
+    const head=document.createElement('div'),lane=document.createElement('div');head.className='track-head';lane.className=`track-lane ${type}-lane drop-target`;lane.tabIndex=0;lane.setAttribute('role','button');
+    head.innerHTML=`<span class="track-icon ${type}-icon">${type==='audio'?'♫':'▦'}</span><span class="track-label"><strong></strong><small>${type==='audio'?'MP3 · WAV':'.mid · .midi'}</small></span><button class="track-mute" type="button" aria-pressed="false" aria-label="음소거">M</button><button class="track-remove" type="button" aria-label="트랙 제거" title="트랙 제거">×</button>`;
+    lane.innerHTML=`<div class="track-grid"></div><div class="track-empty"><span class="empty-plus">＋</span><span>${type==='audio'?'오디오':'MIDI'} 파일을 놓으세요</span><small>${type==='audio'?'MP3 또는 WAV':'.mid 또는 .midi'}</small></div>${type==='audio'?'<canvas class="waveform" aria-hidden="true"></canvas>':'<div class="midi-overview" aria-hidden="true"></div>'}<div class="clip-name"></div><div class="playhead" aria-hidden="true"></div>`;
+    Object.assign(track,{head,lane,label:head.querySelector('strong'),mute:head.querySelector('.track-mute'),grid:lane.querySelector('.track-grid'),clipName:lane.querySelector('.clip-name'),wave:lane.querySelector('canvas'),overview:lane.querySelector('.midi-overview')});
+    if(type==='audio'){
+      track.audio=document.createElement('audio');track.audio.preload='metadata';
+      track.audio.preservesPitch=true;
+      track.audio.addEventListener('loadedmetadata',()=>{if(!track.file)return;track.sourceDuration=Number.isFinite(track.audio.duration)?track.audio.duration:0;track.trimStart=clamp(track.trimStart,0,Math.max(0,track.sourceDuration-.1));refreshSummary()});
+      track.audio.addEventListener('error',()=>{if(track.file)toast(`${track.file.name} 오디오를 재생할 수 없습니다.`)});
+    }
+    track.mute.addEventListener('click',()=>{track.muted=!track.muted;track.mute.setAttribute('aria-pressed',String(track.muted));if(type==='audio')track.audio.muted=track.muted;else if(track.muted)stopTrackNotes(track.id)});
+    head.querySelector('.track-remove').addEventListener('click',()=>removeTrack(id));
+    connectDropZone(lane,track);
+    state.tracks.push(track);el.trackRows.append(head,lane);renumberTracks();refreshSummary();return track;
+  }
+  function renumberTracks(){const counts={audio:0,midi:0};for(const track of state.tracks){track.label.textContent=`${track.type==='audio'?'오디오':'MIDI'} ${++counts[track.type]}`;track.lane.setAttribute('aria-label',`${track.label.textContent} 파일 추가 또는 편집`);track.mute.setAttribute('aria-label',`${track.label.textContent} 음소거`)}}
+  function removeTrack(id){
+    const track=trackById(id);if(!track)return;pause();
+    if(track.type==='audio'){track.audio.pause();track.audio.removeAttribute('src');track.audio.load();if(track.url)URL.revokeObjectURL(track.url);if(state.selectedAudioTrack===id){state.selectedAudioTrack=null;closeModal('audioEditOverlay')}}
+    else{track.piano?.dispose();state.notes=state.notes.filter(note=>note.sourceTrack!==id);state.history=[];if(state.selectedTrack===id){state.selectedTrack=null;closeModal('midiEditOverlay')}}
+    track.head.remove();track.lane.remove();state.tracks=state.tracks.filter(item=>item!==track);syncMidiMetadata();recalculateMidiDuration();state.position=clamp(state.position,0,duration());renumberTracks();refreshSummary();
+  }
+  function refreshSummary(){
+    const parts=[];
+    for(const track of state.tracks){
+      track.lane.classList.toggle('has-file',!!track.file);track.clipName.textContent=track.file?.name||'';
+      if(track.file)parts.push(`${track.label.textContent} ${track.file.name}${track.type==='audio'&&track.trimStart?` · 앞 ${track.trimStart.toFixed(2)}초 자름`:''}${track.type==='audio'&&track.leadIn?` · 앞 ${track.leadIn.toFixed(2)}초 공백`:''}`);
+    }
+    el.summary.textContent=parts.length?parts.join(' / '):'오디오와 MIDI를 추가하면 함께 재생됩니다.';
+    el.noteCount.textContent=state.midiFile?`${state.notes.length.toLocaleString('ko-KR')}개 음표`:'MIDI 대기 중';
+    el.fallEmpty.classList.toggle('hidden',!!state.midiFile||!!state.midiInput||!!state.performanceNotes.length);
+    el.rollEmpty.classList.toggle('hidden',!!state.midiFile||!!state.midiInput||!!state.performanceNotes.length);
+    el.originalBpm.value=state.originalBpm===null?'':String(state.originalBpm);
+    el.bpm.value=String(state.gridBpm);
+    updateTransport();renderRuler();drawTimelineGrid();for(const track of audioTracks())drawWave(track);drawMidiOverview();renderPracticeOverview();drawViews();updateTrimControls();renderPerformanceStatus();
+  }
 
-  function openModal(id,focusId){state.lastFocus=document.activeElement;document.querySelectorAll('.overlay,.modal-overlay').forEach(item=>item.classList.add('hidden'));$(id).classList.remove('hidden');document.body.classList.add('modal-open');requestAnimationFrame(()=>{if(focusId)$(focusId).focus();drawViews();drawTrimWave()})}
+
+  function openModal(id,focusId){state.lastFocus=document.activeElement;document.querySelectorAll('.overlay,.modal-overlay').forEach(item=>item.classList.add('hidden'));$(id).classList.remove('hidden');document.body.classList.add('modal-open');requestAnimationFrame(()=>{if(focusId)$(focusId).focus();if(id==='viewOverlay')renderPracticeOverview();drawViews();drawTrimWave()})}
   function closeModal(id){$(id).classList.add('hidden');document.body.classList.remove('modal-open');state.lastFocus?.focus?.()}
-  function openAudioEditor(){if(!state.audioFile){el.audioInput.click();return}pause();openModal('audioEditOverlay','closeAudioEditor');updateTrimControls()}
-  function openMidiEditor(){if(!state.midiFile){el.midiInput.click();return}pause();openModal('midiEditOverlay','closeMidiEditor');if(state.selectedNoteId!==null)selectNote(state.selectedNoteId);else clearNoteSelection()}
-  function updateTrimControls(){if(!state.audioFile)return;const maximum=Math.max(0,state.audioSourceDuration-.1);el.trimRange.max=String(maximum);el.trimSeconds.max=String(maximum);el.trimRange.value=String(state.audioTrimStart);el.trimSeconds.value=state.audioTrimStart.toFixed(2);el.sourceDuration.textContent=fmt(state.audioSourceDuration);el.trimStartLabel.textContent=fmt(state.audioTrimStart);el.trimRemaining.textContent=fmt(audioLength());drawTrimWave()}
-  function setTrim(value){if(!state.audioFile)return;if(state.playing)pause();state.audioTrimStart=clamp(Number(value)||0,0,Math.max(0,state.audioSourceDuration-.1));state.position=0;audio.pause();audio.currentTime=state.audioTrimStart;refreshSummary()}
+  function openAudioEditor(id){const track=trackById(id)||audioTracks().find(item=>item.file);if(!track){const empty=audioTracks()[0]||createTrack('audio');openTrackFile(empty);return}if(!track.file){openTrackFile(track);return}pause();state.selectedAudioTrack=track.id;openModal('audioEditOverlay','closeAudioEditor');updateTrimControls()}
+  function openMidiEditor(id){
+    const chosen=trackById(id)?.file?id:trackById(state.selectedTrack)?.file?state.selectedTrack:midiTracks().find(track=>track.file)?.id;
+    if(!chosen){const empty=midiTracks()[0]||createTrack('midi');openTrackFile(empty);return}
+    pause();state.selectedTrack=chosen;state.selectedNoteId=null;
+    openModal('midiEditOverlay','editorScroll');renderEditor();
+    requestAnimationFrame(()=>focusEditorPitch());
+  }
+  function updateTrimControls(){const track=trackById(state.selectedAudioTrack);if(!track?.file)return;const maximum=Math.max(0,track.sourceDuration-.1);el.trimRange.max=String(maximum);el.trimSeconds.max=String(maximum);el.trimRange.value=String(track.trimStart);el.trimSeconds.value=track.trimStart.toFixed(2);el.leadInRange.value=String(track.leadIn||0);el.leadInSeconds.value=(track.leadIn||0).toFixed(2);el.sourceDuration.textContent=fmt(track.sourceDuration);el.trimStartLabel.textContent=fmt(track.trimStart);el.leadInLabel.textContent=fmt(track.leadIn||0);el.trimRemaining.textContent=fmt(audioLength(track));drawTrimWave()}
+  function setTrim(value){const track=trackById(state.selectedAudioTrack);if(!track?.file)return;if(state.playing)pause();track.trimStart=clamp(Number(value)||0,0,Math.max(0,track.sourceDuration-.1));state.position=0;track.audio.pause();track.audio.currentTime=track.trimStart;refreshSummary()}
+  function setLeadIn(value){const track=trackById(state.selectedAudioTrack);if(!track?.file)return;if(state.playing)pause();track.leadIn=clamp(Number(value)||0,0,120);state.position=0;track.audio.pause();track.audio.currentTime=track.trimStart;refreshSummary()}
 
-  function selectNote(id){state.selectedNoteId=id;const note=state.notes.find(item=>item.id===id);if(!note)return;el.notePitch.value=String(note.pitch);el.noteStart.value=note.start.toFixed(2);el.noteDuration.value=(note.end-note.start).toFixed(2);el.noteHand.value=note.hand;el.noteFormTitle.textContent=`${noteName(note.pitch)} 음표 수정`;el.selectedNoteHint.textContent='값을 바꾸고 저장하거나 삭제하세요.';el.saveNote.textContent='변경 저장';el.deleteNote.classList.remove('hidden');el.cancelNote.classList.remove('hidden');renderEditor()}
-  function clearNoteSelection(){state.selectedNoteId=null;el.noteFormTitle.textContent='음표 추가';el.selectedNoteHint.textContent='값을 정한 뒤 추가하세요.';el.saveNote.textContent='음표 추가';el.deleteNote.classList.add('hidden');el.cancelNote.classList.add('hidden');renderEditor()}
-  function editorPitchRange(){let low=48,high=84;for(const note of state.notes){low=Math.min(low,note.pitch-2);high=Math.max(high,note.pitch+2)}return {low:clamp(low,21,108),high:clamp(high,21,108)}}
-  function renderEditor(){if(!state.midiFile)return;const total=Math.max(state.midiDuration,viewLength),maxStart=Math.max(0,Math.ceil((total-viewLength)*4)/4);state.editorStart=clamp(state.editorStart,0,maxStart);el.editorWindow.max=String(maxStart);el.editorWindow.value=String(state.editorStart);el.editorWindowLabel.textContent=`${fmt(state.editorStart)}–${fmt(state.editorStart+viewLength)}`;el.editNoteCount.textContent=`${state.notes.length.toLocaleString('ko-KR')}개 음표`;el.undoMidi.disabled=!state.history.length;const {low,high}=editorPitchRange(),rows=high-low+1,gridHeight=rows*rowHeight+30;el.editorGrid.style.height=`${gridHeight}px`;el.editorGrid.replaceChildren();const labels=document.createElement('div'),header=document.createElement('div'),area=document.createElement('div');labels.className='editor-pitch-labels';header.className='editor-time-header';area.className='editor-area';for(let pitch=high;pitch>=low;pitch--){const label=document.createElement('div');label.className='editor-pitch-label'+(blackKeys.has(pitch%12)?' black':'');label.style.top=`${(high-pitch)*rowHeight}px`;label.style.height=`${rowHeight}px`;label.textContent=noteName(pitch);labels.appendChild(label)}for(let i=0;i<=8;i++){const mark=document.createElement('span');mark.textContent=fmt(state.editorStart+i);header.appendChild(mark)}for(const note of state.notes){if(note.end<=state.editorStart||note.start>=state.editorStart+viewLength)continue;const start=Math.max(note.start,state.editorStart),end=Math.min(note.end,state.editorStart+viewLength),button=document.createElement('button');button.type='button';button.className='editor-note'+(note.hand==='left'?' left':'')+(note.id===state.selectedNoteId?' selected':'');button.style.left=`${(start-state.editorStart)/viewLength*100}%`;button.style.width=`${Math.max(.25,(end-start)/viewLength*100)}%`;button.style.top=`${(high-note.pitch)*rowHeight+2}px`;button.textContent=noteName(note.pitch);button.setAttribute('aria-label',`${noteName(note.pitch)} ${note.start.toFixed(2)}초, 길이 ${(note.end-note.start).toFixed(2)}초, ${note.hand==='left'?'왼손':'오른손'}`);button.addEventListener('click',event=>{event.stopPropagation();selectNote(note.id)});area.appendChild(button)}area.addEventListener('dblclick',event=>{if(event.target!==area)return;const box=area.getBoundingClientRect(),time=state.editorStart+clamp((event.clientX-box.left)/box.width,0,1)*viewLength,start=Math.round(time*4)/4,pitch=clamp(high-Math.floor((event.clientY-box.top)/rowHeight),low,high),hand=pitch<60?'left':'right',id=state.nextId++;editNotes(()=>state.notes.push({id,start,end:start+.5,pitch,velocity:100,hand}));selectNote(id);toast(`${noteName(pitch)} 음표를 추가했습니다.`)});el.editorGrid.append(labels,header,area)}
-  function saveNote(event){event.preventDefault();if(!state.midiFile)return;const pitch=Number(el.notePitch.value),start=Number(el.noteStart.value),length=Number(el.noteDuration.value),hand=el.noteHand.value;if(!Number.isInteger(pitch)||pitch<21||pitch>108||!Number.isFinite(start)||start<0||!Number.isFinite(length)||length<.05||!['left','right'].includes(hand)){toast('음 높이, 시작 시간, 길이를 확인해 주세요.');return}const selected=state.notes.find(note=>note.id===state.selectedNoteId);if(selected){editNotes(()=>Object.assign(selected,{pitch,start,end:start+length,hand}));toast('음표를 수정했습니다.')}else{const id=state.nextId++;editNotes(()=>state.notes.push({id,pitch,start,end:start+length,velocity:100,hand}));selectNote(id);toast('음표를 추가했습니다.')}state.editorStart=Math.max(0,Math.floor(Math.max(0,start-1)*4)/4);renderEditor()}
-  function deleteSelected(){if(state.selectedNoteId===null)return;const id=state.selectedNoteId;editNotes(()=>{state.notes=state.notes.filter(note=>note.id!==id);state.selectedNoteId=null});clearNoteSelection();toast('음표를 삭제했습니다.')}
+  function selectedTrackNotes(){return state.notes.filter(note=>note.sourceTrack===state.selectedTrack)}
+  function editorBeatStep(){return beatGridStep(state.editorViewSeconds,Math.max(1,el.editorGrid.clientWidth-63))}
+  function snapTime(time){const step=editorBeatStep();return beatToSeconds(Math.round(secondsToBeat(Math.max(0,time))/step)*step)}
+  function maxEditorStart(){return Math.max(0,Math.ceil((Math.max(state.midiDuration,state.editorViewSeconds)+4-state.editorViewSeconds)*4)/4)}
+  function editorTimeLabel(seconds){return `${Number(seconds.toFixed(2))}s`}
+  function updateSelectedInfo(){
+    const note=state.notes.find(item=>item.id===state.selectedNoteId);
+    el.selectedNoteInfo.textContent=note?`${noteName(note.pitch)} · ${note.start.toFixed(2)}초 · 길이 ${(note.end-note.start).toFixed(2)}초`:'음표를 선택하거나 빈 칸을 두 번 클릭하세요.';
+    for(const item of el.editorGrid.querySelectorAll('.editor-note'))item.classList.toggle('selected',Number(item.dataset.noteId)===state.selectedNoteId);
+  }
+  function selectNote(id){state.selectedNoteId=id;updateSelectedInfo()}
+  function focusEditorPitch(){
+    const notes=selectedTrackNotes(),focus=notes.length?notes.reduce((sum,note)=>sum+note.pitch,0)/notes.length:60;
+    const middle=(127-focus)*state.editorRowHeight-el.editorScroll.clientHeight/2;
+    el.editorScroll.scrollTop=clamp(middle,0,Math.max(0,el.editorScroll.scrollHeight-el.editorScroll.clientHeight));
+  }
+  function renderEditor(){
+    if(!state.midiFile)return;
+    const view=state.editorViewSeconds,row=state.editorRowHeight;
+    state.editorStart=clamp(state.editorStart,0,maxEditorStart());
+    el.editorWindow.max=String(maxEditorStart());el.editorWindow.value=String(state.editorStart);
+    el.editorWindowLabel.textContent=`${editorTimeLabel(state.editorStart)}–${editorTimeLabel(state.editorStart+view)}`;
+    el.editorZoomLabel.textContent=`${Number(view.toFixed(1))}초`;
+    el.editNoteCount.textContent=`${selectedTrackNotes().length.toLocaleString('ko-KR')}개 음표 · 전체 ${state.notes.length.toLocaleString('ko-KR')}개`;
+    el.undoMidi.disabled=!state.history.length;
+    el.editorTrack.replaceChildren();for(const track of midiTracks().filter(item=>item.file)){const option=document.createElement('option');option.value=track.id;option.textContent=track.label.textContent;el.editorTrack.appendChild(option)}el.editorTrack.value=state.selectedTrack;
+    el.editorGrid.style.height=`${128*row+30}px`;
+    el.editorGrid.replaceChildren();
+    const labels=document.createElement('div'),header=document.createElement('div'),area=document.createElement('div');
+    labels.className='editor-pitch-labels';header.className='editor-time-header';area.className='editor-area';
+    area.style.setProperty('--row-height',`${row}px`);
+    for(let pitch=127;pitch>=0;pitch--){
+      const label=document.createElement('div');label.className='editor-pitch-label'+(blackKeys.has(pitch%12)?' black':'');
+      label.style.top=`${(127-pitch)*row}px`;label.style.height=`${row}px`;label.style.lineHeight=`${row-1}px`;
+      label.textContent=noteName(pitch);labels.appendChild(label);
+    }
+    drawBeatGrid(area,state.editorStart,view,el.editorGrid.clientWidth-63,header);
+    for(const note of selectedTrackNotes()){
+      if(note.end<=state.editorStart||note.start>=state.editorStart+view)continue;
+      const start=Math.max(note.start,state.editorStart),end=Math.min(note.end,state.editorStart+view);
+      const button=document.createElement('button');button.type='button';
+      button.className='editor-note'+(note.hand==='left'?' left':'')+(note.id===state.selectedNoteId?' selected':'')+(note.start<state.editorStart?' clipped-start':'')+(note.end>state.editorStart+view?' clipped-end':'');
+      button.dataset.noteId=String(note.id);
+      button.style.left=`${(start-state.editorStart)/view*100}%`;
+      button.style.width=`${Math.max(.25,(end-start)/view*100)}%`;
+      button.style.top=`${(127-note.pitch)*row+2}px`;
+      button.style.height=`${Math.max(12,row-4)}px`;
+      button.textContent=noteName(note.pitch);
+      button.setAttribute('aria-label',`${noteName(note.pitch)} ${note.start.toFixed(2)}초, 길이 ${(note.end-note.start).toFixed(2)}초`);
+      const handle=document.createElement('span');handle.className='note-resize-handle';handle.setAttribute('aria-hidden','true');button.appendChild(handle);
+      button.addEventListener('pointerdown',event=>beginNoteDrag(event,note,button,area));
+      button.addEventListener('click',event=>{event.stopPropagation();selectNote(note.id)});
+      button.addEventListener('focus',()=>selectNote(note.id));
+      area.appendChild(button);
+    }
+    area.addEventListener('dblclick',event=>{
+      if(event.target!==area)return;
+      const box=area.getBoundingClientRect();
+      const time=state.editorStart+clamp((event.clientX-box.left)/box.width,0,1)*view;
+      const start=snapTime(time);
+      const pitch=clamp(127-Math.floor((event.clientY-box.top)/row),0,127);
+      const hand=pitch<60?'left':'right';
+      const id=state.nextId++;
+      editNotes(()=>{state.notes.push({id,start,end:beatToSeconds(secondsToBeat(start)+editorBeatStep()),pitch,velocity:100,hand,sourceTrack:state.selectedTrack});state.selectedNoteId=id});
+      toast(`${noteName(pitch)} 음표를 추가했습니다.`);
+    });
+    el.editorGrid.append(labels,header,area);updateSelectedInfo();
+  }
+  function beginNoteDrag(event,note,button,area){
+    if(event.button!==0)return;
+    event.preventDefault();event.stopPropagation();selectNote(note.id);
+    const rect=button.getBoundingClientRect(),edge=Math.min(10,rect.width/3);
+    const mode=event.clientX>=rect.right-edge&&!button.classList.contains('clipped-end')?'resize-end':event.clientX<=rect.left+edge&&rect.width>24&&!button.classList.contains('clipped-start')?'resize-start':'move';
+    const width=area.getBoundingClientRect().width;
+    state.editorGesture={type:mode,id:note.id,x:event.clientX,y:event.clientY,start:note.start,end:note.end,pitch:note.pitch,width,changed:false};
+    el.editorScroll.setPointerCapture(event.pointerId);
+  }
+  function beginEditorPan(event){
+    if(event.button!==1)return;
+    event.preventDefault();event.stopPropagation();
+    const width=el.editorGrid.querySelector('.editor-area')?.getBoundingClientRect().width||el.editorScroll.clientWidth;
+    state.editorGesture={type:'pan',x:event.clientX,y:event.clientY,start:state.editorStart,scroll:el.editorScroll.scrollTop,width};
+    el.editorScroll.classList.add('panning');el.editorScroll.setPointerCapture(event.pointerId);
+  }
+  function moveEditorPointer(event){
+    const gesture=state.editorGesture;if(!gesture)return;
+    if(gesture.type==='pan'){
+      const start=clamp(gesture.start-(event.clientX-gesture.x)/gesture.width*state.editorViewSeconds,0,maxEditorStart());
+      if(start!==state.editorStart){state.editorStart=start;renderEditor()}
+      el.editorScroll.scrollTop=gesture.scroll-(event.clientY-gesture.y);
+      return;
+    }
+    const note=state.notes.find(item=>item.id===gesture.id);if(!note)return;
+    const delta=(event.clientX-gesture.x)/gesture.width*state.editorViewSeconds;
+    let start=gesture.start,end=gesture.end,pitch=gesture.pitch;
+    if(gesture.type==='move'){start=Math.max(0,event.altKey?gesture.start+delta:snapTime(gesture.start+delta));end=start+(gesture.end-gesture.start);pitch=clamp(gesture.pitch-Math.round((event.clientY-gesture.y)/state.editorRowHeight),0,127)}
+    else if(gesture.type==='resize-end')end=Math.max(gesture.start+.01,event.altKey?gesture.end+delta:snapTime(gesture.end+delta));
+    else start=clamp(event.altKey?gesture.start+delta:snapTime(gesture.start+delta),0,gesture.end-.01);
+    if(Math.abs(note.start-start)<.0001&&Math.abs(note.end-end)<.0001&&note.pitch===pitch)return;
+    if(!gesture.changed){pushHistory();gesture.changed=true}
+    Object.assign(note,{start,end,pitch});recalculateMidiDuration();state.nextNote=noteIndexAt(state.position);
+    renderEditor();drawMidiOverview();drawViews();
+  }
+  function endEditorPointer(event){
+    const gesture=state.editorGesture;if(!gesture)return;
+    state.editorGesture=null;el.editorScroll.classList.remove('panning');
+    if(el.editorScroll.hasPointerCapture?.(event.pointerId))el.editorScroll.releasePointerCapture(event.pointerId);
+    if(gesture.changed)refreshSummary();
+  }
+  function zoomEditorTime(factor,anchor=.5){
+    const center=state.editorStart+state.editorViewSeconds*anchor;
+    state.editorViewSeconds=clamp(state.editorViewSeconds*factor,1,64);
+    state.editorStart=Math.max(0,center-state.editorViewSeconds*anchor);renderEditor();
+  }
+  function zoomEditorPitch(factor){
+    const centerPitch=127-(el.editorScroll.scrollTop+el.editorScroll.clientHeight/2)/state.editorRowHeight;
+    state.editorRowHeight=clamp(Math.round(state.editorRowHeight*factor),14,40);
+    renderEditor();el.editorScroll.scrollTop=(127-centerPitch)*state.editorRowHeight-el.editorScroll.clientHeight/2;
+  }
+  function deleteSelected(){
+    if(state.selectedNoteId===null)return;
+    const id=state.selectedNoteId;
+    editNotes(()=>{state.notes=state.notes.filter(note=>note.id!==id);state.selectedNoteId=null});
+    toast('음표를 삭제했습니다.');
+  }
 
-  function clearFiles(){stopPlayback();if(state.audioUrl)URL.revokeObjectURL(state.audioUrl);audio.removeAttribute('src');audio.load();Object.assign(state,{audioFile:null,audioUrl:null,audioSourceDuration:0,audioTrimStart:0,wavePeaks:null,midiFile:null,notes:[],midiTailDuration:0,midiDuration:0,bpm:null,tempoPoints:[],position:0,history:[],selectedNoteId:null});refreshSummary()}
-  function handleDrop(event){event.preventDefault();event.currentTarget?.classList?.remove('drag-over');const files=[...event.dataTransfer.files];for(const file of files){if(/\.(mid|midi)$/i.test(file.name))loadMidi(file);else if(/\.(mp3|wav)$/i.test(file.name))loadAudio(file)}}
-  function connectDropZone(zone,input,hasFile,openEditor){zone.addEventListener('click',()=>hasFile()?openEditor():input.click());zone.addEventListener('keydown',event=>{if(event.key==='Enter'||event.key===' '){event.preventDefault();hasFile()?openEditor():input.click()}});zone.addEventListener('dragover',event=>{event.preventDefault();zone.classList.add('drag-over')});zone.addEventListener('dragleave',()=>zone.classList.remove('drag-over'));zone.addEventListener('drop',handleDrop)}
+  function clearFiles(){
+    stopPlayback();
+    for(const track of state.tracks){if(track.type==='audio'){track.audio.pause();track.audio.removeAttribute('src');track.audio.load();if(track.url)URL.revokeObjectURL(track.url);Object.assign(track,{file:null,url:null,sourceDuration:0,trimStart:0,wavePeaks:null})}else Object.assign(track,{file:null,tailDuration:0,bpm:null,tempoPoints:[],ticksPerBeat:480})}
+    Object.assign(state,{midiFile:null,notes:[],midiTailDuration:0,midiDuration:0,tempoPoints:[],position:0,history:[],selectedNoteId:null,selectedTrack:null,selectedAudioTrack:null,practiceFlagTime:null,practiceDrag:null,performanceNotes:[]});
+    syncMidiMetadata();
+    refreshSummary();
+  }
+  function openTrackFile(track){state.fileTarget=track.id;(track.type==='audio'?el.audioInput:el.midiInput).click()}
+  function importDroppedFiles(files,target){
+    let first=true;const used=new Set();
+    for(const file of files){
+      const type=/\.(mid|midi)$/i.test(file.name)?'midi':/\.(mp3|wav)$/i.test(file.name)?'audio':null;
+      if(!type)continue;
+      const track=first&&target?.type===type?target:state.tracks.find(item=>item.type===type&&!item.file&&!used.has(item.id))||createTrack(type);
+      used.add(track.id);
+      if(type==='midi')loadMidi(file,track.id);else loadAudio(file,track.id);
+      first=false;
+    }
+  }
+  function connectDropZone(zone,track){
+    const activate=()=>track.file?(track.type==='audio'?openAudioEditor(track.id):openMidiEditor(track.id)):openTrackFile(track);
+    zone.addEventListener('click',activate);
+    zone.addEventListener('keydown',event=>{if(event.key==='Enter'||event.key===' '){event.preventDefault();activate()}});
+    zone.addEventListener('dragover',event=>{event.preventDefault();zone.classList.add('drag-over')});
+    zone.addEventListener('dragleave',()=>zone.classList.remove('drag-over'));
+    zone.addEventListener('drop',event=>{event.preventDefault();zone.classList.remove('drag-over');importDroppedFiles(event.dataTransfer.files,track)});
+  }
 
-  el.play.addEventListener('click',()=>state.playing?pause():play());el.stop.addEventListener('click',()=>stopPlayback());el.seek.addEventListener('input',()=>seek(Number(el.seek.value)/1000*duration()));el.speed.addEventListener('change',()=>setSpeed(Number(el.speed.value)));el.audioInput.addEventListener('change',event=>{if(event.target.files[0])loadAudio(event.target.files[0])});el.midiInput.addEventListener('change',event=>{if(event.target.files[0])loadMidi(event.target.files[0])});connectDropZone(el.audioDrop,el.audioInput,()=>!!state.audioFile,openAudioEditor);connectDropZone(el.midiDrop,el.midiInput,()=>!!state.midiFile,openMidiEditor);document.addEventListener('dragover',event=>event.preventDefault());document.addEventListener('drop',event=>{event.preventDefault();if(event.target.closest('.drop-target'))return;handleDrop(event)});
-  $('audioMute').addEventListener('click',event=>{state.audioMuted=!state.audioMuted;audio.muted=state.audioMuted;event.currentTarget.setAttribute('aria-pressed',String(state.audioMuted))});$('midiMute').addEventListener('click',event=>{state.midiMuted=!state.midiMuted;if(state.midiMuted)stopNotes();event.currentTarget.setAttribute('aria-pressed',String(state.midiMuted))});$('clearFiles').addEventListener('click',clearFiles);
-  $('openResources').addEventListener('click',()=>openModal('resourceOverlay','closeResources'));$('closeResources').addEventListener('click',()=>closeModal('resourceOverlay'));$('drawerAudio').addEventListener('click',()=>{closeModal('resourceOverlay');el.audioInput.click()});$('drawerMidi').addEventListener('click',()=>{closeModal('resourceOverlay');el.midiInput.click()});$('openPlayView').addEventListener('click',()=>openModal('viewOverlay','closePlayView'));$('closePlayView').addEventListener('click',()=>closeModal('viewOverlay'));$('openAudioEditor').addEventListener('click',openAudioEditor);$('closeAudioEditor').addEventListener('click',()=>closeModal('audioEditOverlay'));$('openMidiEditor').addEventListener('click',openMidiEditor);$('closeMidiEditor').addEventListener('click',()=>closeModal('midiEditOverlay'));$('doneMidi').addEventListener('click',()=>closeModal('midiEditOverlay'));
+
+  el.play.addEventListener('click',()=>state.playing?pause():play());
+  el.stop.addEventListener('click',()=>stopPlayback());
+  el.metronome.addEventListener('click',toggleMetronome);
+  el.seek.addEventListener('input',()=>seek(Number(el.seek.value)/1000*duration()));
+  el.speed.addEventListener('change',()=>setSpeed(Number(el.speed.value)));
+  el.audioInput.addEventListener('change',event=>{if(event.target.files[0])loadAudio(event.target.files[0],state.fileTarget||audioTracks().find(track=>!track.file)?.id||createTrack('audio').id)});
+  el.midiInput.addEventListener('change',event=>{if(event.target.files[0])loadMidi(event.target.files[0],state.fileTarget||midiTracks().find(track=>!track.file)?.id||createTrack('midi').id)});
+  window.addEventListener('keyroom:import-midi',event=>{const file=event.detail?.file;if(file){const track=midiTracks().find(item=>!item.file)||createTrack('midi');loadMidi(file,track.id)}});
+  document.addEventListener('dragover',event=>event.preventDefault());
+  document.addEventListener('drop',event=>{event.preventDefault();if(event.target.closest('.drop-target'))return;importDroppedFiles(event.dataTransfer.files)});
+
+  $('clearFiles').addEventListener('click',clearFiles);
+  el.connectMidi.addEventListener('click',connectMidi);
+  el.midiDevice.addEventListener('change',()=>selectMidiInput(el.midiDevice.value));
+  el.recordPerformance.addEventListener('click',toggleRecording);
+  el.clearPerformance.addEventListener('click',()=>{state.performanceNotes=[];renderPerformanceStatus();renderPracticeOverview();drawViews()});
+  el.downloadPerformance.addEventListener('click',downloadPerformance);
+  $('jumpToMidiInput').addEventListener('click',()=>{$('midiInputTitle').scrollIntoView({behavior:'smooth',block:'center'});el.connectMidi.focus()});
+  $('addAudioTrack').addEventListener('click',()=>openTrackFile(createTrack('audio')));
+  $('addMidiTrack').addEventListener('click',()=>openTrackFile(createTrack('midi')));
+  el.originalBpm.addEventListener('change',()=>{
+    if(!el.originalBpm.value.trim()){
+      state.originalBpmManual=false;syncMidiMetadata();refreshSummary();return;
+    }
+    state.originalBpm=clamp(Math.round(Number(el.originalBpm.value)||state.originalBpm||120),30,300);
+    state.originalBpmManual=true;
+    if(!state.gridBpmManual)state.gridBpm=state.originalBpm;
+    applyPlaybackSpeed();refreshSummary();
+    if(!$('midiEditOverlay').classList.contains('hidden'))renderEditor();
+  });
+  el.bpm.addEventListener('change',()=>{
+    if(!state.originalBpm&&duration()){el.bpm.value=String(state.gridBpm);toast('원본 BPM을 입력하거나 MIDI를 불러오세요.');return}
+    if(!el.bpm.value.trim()){state.gridBpmManual=false;state.gridBpm=state.originalBpm||120;applyPlaybackSpeed();refreshSummary();return}
+    state.gridBpm=clamp(Math.round(Number(el.bpm.value)||state.gridBpm),30,300);
+    state.gridBpmManual=true;
+    applyPlaybackSpeed();refreshSummary();
+  });
+  $('openResources').addEventListener('click',()=>openModal('resourceOverlay','closeResources'));
+  $('closeResources').addEventListener('click',()=>closeModal('resourceOverlay'));
+  for(const [button,type] of [['drawerAudio','audio'],['drawerMidi','midi']])$(button).addEventListener('click',()=>{closeModal('resourceOverlay');openTrackFile(createTrack(type))});
+  $('openPlayView').addEventListener('click',()=>openModal('viewOverlay','practiceScrub'));
+  $('closePlayView').addEventListener('click',()=>closeModal('viewOverlay'));
+  const fallStage=$('view-fall');
+  fallStage.addEventListener('wheel',event=>{
+    if(event.ctrlKey||event.shiftKey||Math.abs(event.deltaX)>Math.abs(event.deltaY)||!event.deltaY)return;
+    const delta=event.deltaY*(event.deltaMode===1?16:event.deltaMode===2?fallStage.clientHeight:1);
+    if(event.metaKey){
+      event.preventDefault();
+      state.fallScale=clamp(state.fallScale*Math.exp(-clamp(delta,-120,120)*.003),18,180);
+      el.fallSpeedLabel.textContent=`${(state.fallScale/56).toFixed(1)}×`;
+      drawFall();
+    }else if(duration()){
+      event.preventDefault();
+      seek(currentPosition()+clamp(delta,-240,240)/120);
+    }
+  },{passive:false});
+  el.placePracticeFlag.addEventListener('click',()=>setPracticeFlag(currentPosition()));
+  el.clearPracticeFlag.addEventListener('click',()=>{state.practiceFlagTime=null;updatePracticeTransport()});
+  el.practiceScrub.addEventListener('pointerdown',event=>startPracticeDrag(event,'seek'));
+  el.practiceFlag.addEventListener('pointerdown',event=>startPracticeDrag(event,'flag'));
+  el.practiceScrub.addEventListener('pointermove',movePracticeDrag);
+  el.practiceScrub.addEventListener('pointerup',endPracticeDrag);
+  el.practiceScrub.addEventListener('pointercancel',endPracticeDrag);
+  el.practiceScrub.addEventListener('keydown',event=>{
+    if(!['ArrowLeft','ArrowRight','Home','End'].includes(event.key))return;
+    event.preventDefault();event.stopPropagation();
+    if(event.key==='Home')seek(0);
+    else if(event.key==='End')seek(Math.max(0,duration()-.01));
+    else{const beat=secondsToBeat(state.position),next=beat+(event.key==='ArrowRight'?1:-1);seek(beatToSeconds(Math.max(0,next)))}
+  });
+  $('openAudioEditor').addEventListener('click',()=>openAudioEditor());
+  $('closeAudioEditor').addEventListener('click',()=>closeModal('audioEditOverlay'));
+  $('openMidiEditor').addEventListener('click',()=>openMidiEditor());
+  $('closeMidiEditor').addEventListener('click',()=>closeModal('midiEditOverlay'));
+  $('doneMidi').addEventListener('click',()=>closeModal('midiEditOverlay'));
+
   for(const overlay of document.querySelectorAll('.overlay,.modal-overlay'))overlay.addEventListener('click',event=>{if(event.target===overlay)closeModal(overlay.id)});
-  document.querySelectorAll('.tab').forEach(tab=>tab.addEventListener('click',()=>{state.tab=tab.dataset.view;document.querySelectorAll('.tab').forEach(item=>{item.classList.toggle('active',item===tab);item.setAttribute('aria-selected',String(item===tab))});document.querySelectorAll('.view-stage').forEach(stage=>stage.classList.toggle('hidden',stage.id!==`view-${state.tab}`));requestAnimationFrame(drawViews)}));document.querySelectorAll('[data-feature]').forEach(button=>button.addEventListener('click',()=>toast(`${button.dataset.feature} 기능은 다음 단계에서 연결할 예정입니다.`)));
-  el.trimRange.addEventListener('input',()=>setTrim(el.trimRange.value));el.trimSeconds.addEventListener('change',()=>setTrim(el.trimSeconds.value));$('resetTrim').addEventListener('click',()=>setTrim(0));$('previewTrim').addEventListener('click',()=>{if(state.playing)pause();else{seek(0);play()}});$('applyTrim').addEventListener('click',()=>closeModal('audioEditOverlay'));$('replaceAudio').addEventListener('click',()=>{closeModal('audioEditOverlay');el.audioInput.click()});
-  $('transposeDown').addEventListener('click',()=>transpose(-1));$('transposeUp').addEventListener('click',()=>transpose(1));el.undoMidi.addEventListener('click',undoMidi);$('replaceMidi').addEventListener('click',()=>{closeModal('midiEditOverlay');el.midiInput.click()});$('downloadMidi').addEventListener('click',exportMidi);el.editorWindow.addEventListener('input',()=>{state.editorStart=Number(el.editorWindow.value);renderEditor()});$('noteForm').addEventListener('submit',saveNote);el.deleteNote.addEventListener('click',deleteSelected);el.cancelNote.addEventListener('click',clearNoteSelection);for(let pitch=108;pitch>=21;pitch--){const option=document.createElement('option');option.value=String(pitch);option.textContent=noteName(pitch);el.notePitch.appendChild(option)}el.notePitch.value='60';
-  document.addEventListener('keydown',event=>{if(event.key==='Escape'){const open=[...document.querySelectorAll('.overlay,.modal-overlay')].find(item=>!item.classList.contains('hidden'));if(open){closeModal(open.id);return}}if(event.code==='Space'&&!['INPUT','BUTTON','SELECT','TEXTAREA'].includes(document.activeElement.tagName)&&$('resourceOverlay').classList.contains('hidden')&&$('audioEditOverlay').classList.contains('hidden')&&$('midiEditOverlay').classList.contains('hidden')){event.preventDefault();state.playing?pause():play()}if((event.key==='Delete'||event.key==='Backspace')&&!$('midiEditOverlay').classList.contains('hidden')&&document.activeElement.classList.contains('editor-note')){event.preventDefault();deleteSelected()}});
-  audio.addEventListener('loadedmetadata',()=>{if(!state.audioFile)return;state.audioSourceDuration=Number.isFinite(audio.duration)?audio.duration:0;state.audioTrimStart=clamp(state.audioTrimStart,0,Math.max(0,state.audioSourceDuration-.1));refreshSummary()});audio.addEventListener('error',()=>{if(state.audioFile)toast('이 오디오 파일은 브라우저에서 재생할 수 없습니다.')});window.addEventListener('resize',()=>{drawWave();drawTrimWave();drawViews()});
-  if(document.modelContext?.registerTool){try{Promise.resolve(document.modelContext.registerTool({name:'control_practice_playback',title:'연습 재생 제어',description:'현재 불러온 오디오와 MIDI의 재생, 일시정지, 정지 또는 위치 이동을 실행합니다.',inputSchema:{type:'object',properties:{action:{type:'string',enum:['play','pause','stop','seek']},seconds:{type:'number',minimum:0}},required:['action'],additionalProperties:false},annotations:{readOnlyHint:false,untrustedContentHint:false},async execute(input){if(!input||!['play','pause','stop','seek'].includes(input.action))throw Error('올바른 재생 동작을 선택하세요.');if(input.action==='seek'){if(!Number.isFinite(input.seconds)||input.seconds<0||input.seconds>duration())throw Error('재생 위치가 범위를 벗어났습니다.');seek(input.seconds)}else if(input.action==='play')await play();else if(input.action==='pause')pause();else stopPlayback();return {playing:state.playing,position:state.position,duration:duration(),audioLoaded:!!state.audioFile,midiLoaded:!!state.midiFile}}})).catch(()=>{})}catch(e){}}
-  refreshSummary();
+  document.querySelectorAll('.tab').forEach(tab=>tab.addEventListener('click',()=>{state.tab=tab.dataset.view;document.querySelectorAll('.tab').forEach(item=>{item.classList.toggle('active',item===tab);item.setAttribute('aria-selected',String(item===tab))});document.querySelectorAll('.view-stage').forEach(stage=>stage.classList.toggle('hidden',stage.id!==`view-${state.tab}`));$('fallLegend').classList.toggle('hidden',state.tab!=='fall');$('rollLegend').classList.toggle('hidden',state.tab!=='roll');requestAnimationFrame(drawViews)}));document.querySelectorAll('[data-feature]').forEach(button=>button.addEventListener('click',()=>toast(`${button.dataset.feature} 기능은 다음 단계에서 연결할 예정입니다.`)));
+  el.trimRange.addEventListener('input',()=>setTrim(el.trimRange.value));el.trimSeconds.addEventListener('change',()=>setTrim(el.trimSeconds.value));el.leadInRange.addEventListener('input',()=>setLeadIn(el.leadInRange.value));el.leadInSeconds.addEventListener('change',()=>setLeadIn(el.leadInSeconds.value));$('resetTrim').addEventListener('click',()=>{setTrim(0);setLeadIn(0)});$('previewTrim').addEventListener('click',()=>{if(state.playing)pause();else{seek(0);play()}});$('applyTrim').addEventListener('click',()=>closeModal('audioEditOverlay'));$('replaceAudio').addEventListener('click',()=>{closeModal('audioEditOverlay');openTrackFile(trackById(state.selectedAudioTrack))});
+  $('transposeDown').addEventListener('click',()=>transpose(-1));
+  $('transposeUp').addEventListener('click',()=>transpose(1));
+  el.undoMidi.addEventListener('click',undoMidi);
+  $('replaceMidi').addEventListener('click',()=>{closeModal('midiEditOverlay');openTrackFile(trackById(state.selectedTrack))});
+  $('downloadMidi').addEventListener('click',exportMidi);
+  el.editorWindow.addEventListener('input',()=>{state.editorStart=Number(el.editorWindow.value);renderEditor()});
+  el.editorTrack.addEventListener('change',()=>{state.selectedTrack=el.editorTrack.value;state.selectedNoteId=null;renderEditor();focusEditorPitch()});
+  $('editorZoomIn').addEventListener('click',()=>zoomEditorTime(.75));
+  $('editorZoomOut').addEventListener('click',()=>zoomEditorTime(4/3));
+  el.editorScroll.addEventListener('pointerdown',beginEditorPan);
+  el.editorScroll.addEventListener('pointermove',moveEditorPointer);
+  el.editorScroll.addEventListener('pointerup',endEditorPointer);
+  el.editorScroll.addEventListener('pointercancel',endEditorPointer);
+  el.editorScroll.addEventListener('auxclick',event=>{if(event.button===1)event.preventDefault()});
+  el.editorScroll.addEventListener('wheel',event=>{if(!event.metaKey&&!event.ctrlKey)return;event.preventDefault();const box=el.editorGrid.querySelector('.editor-area')?.getBoundingClientRect();const anchor=box?clamp((event.clientX-box.left)/box.width,0,1):.5;zoomEditorTime(Math.exp((event.metaKey?-1:1)*event.deltaY*.002),anchor)},{passive:false});
+  document.addEventListener('keydown',event=>{
+    if(event.key==='Escape'){
+      const open=[...document.querySelectorAll('.overlay,.modal-overlay')].find(item=>!item.classList.contains('hidden'));
+      if(open){closeModal(open.id);return}
+    }
+    const editorOpen=!$('midiEditOverlay').classList.contains('hidden');
+    const typing=['INPUT','TEXTAREA','SELECT'].includes(document.activeElement?.tagName)||document.activeElement?.isContentEditable;
+    if(event.code==='Space'&&!$('viewOverlay').classList.contains('hidden')&&!typing&&!event.metaKey&&!event.ctrlKey&&!event.altKey){
+      event.preventDefault();if(event.repeat)return;
+      if(state.playing)pause();else{if(!event.shiftKey&&state.practiceFlagTime!==null)seek(state.practiceFlagTime);play()}
+      return;
+    }
+    if(editorOpen&&!typing){
+      if((event.metaKey||event.ctrlKey)&&event.key.toLowerCase()==='z'){event.preventDefault();undoMidi();return}
+      if(event.key==='Delete'||event.key==='Backspace'){event.preventDefault();deleteSelected();return}
+      const plus=event.key==='+'||event.key==='='||event.code==='NumpadAdd';
+      const minus=event.key==='-'||event.key==='_'||event.code==='NumpadSubtract';
+      if(plus||minus){event.preventDefault();if(event.altKey)zoomEditorPitch(plus?1.2:1/1.2);else zoomEditorTime(plus?.75:4/3);return}
+    }
+    if(event.code==='Space'&&!['INPUT','BUTTON','SELECT','TEXTAREA'].includes(document.activeElement?.tagName)&&$('resourceOverlay').classList.contains('hidden')&&$('audioEditOverlay').classList.contains('hidden')&&!editorOpen){event.preventDefault();state.playing?pause():play()}
+  });
+
+  window.addEventListener('resize',()=>{refreshSummary();if(!$('midiEditOverlay').classList.contains('hidden'))renderEditor()});
+  if(document.modelContext?.registerTool){try{Promise.resolve(document.modelContext.registerTool({name:'control_practice_playback',title:'연습 재생 제어',description:'현재 불러온 오디오와 MIDI의 재생, 일시정지, 정지 또는 위치 이동을 실행합니다.',inputSchema:{type:'object',properties:{action:{type:'string',enum:['play','pause','stop','seek']},seconds:{type:'number',minimum:0}},required:['action'],additionalProperties:false},annotations:{readOnlyHint:false,untrustedContentHint:false},async execute(input){if(!input||!['play','pause','stop','seek'].includes(input.action))throw Error('올바른 재생 동작을 선택하세요.');if(input.action==='seek'){if(!Number.isFinite(input.seconds)||input.seconds<0||input.seconds>duration())throw Error('재생 위치가 범위를 벗어났습니다.');seek(input.seconds)}else if(input.action==='play')await play();else if(input.action==='pause')pause();else stopPlayback();return {playing:state.playing,position:state.position,duration:duration(),audioLoaded:audioTracks().some(track=>!!track.file),midiLoaded:!!state.midiFile}}})).catch(()=>{})}catch(e){}}
+  createTrack('audio');createTrack('midi');refreshSummary();
 })();

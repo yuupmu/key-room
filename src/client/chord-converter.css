@@ -1,0 +1,35 @@
+.chord-converter{padding:21px;display:flex;flex-direction:column;gap:14px}
+.chord-converter h2{font-size:1.12rem;letter-spacing:-.02em;margin:-6px 0 0}
+.chord-converter .chord-intro,.chord-status{margin:0;color:#aebdae;font-size:.86rem;line-height:1.6}
+.chord-input-grid{display:grid;grid-template-columns:minmax(240px,.8fr) minmax(320px,1.2fr);gap:15px}
+.chord-source,.chord-manual{display:flex;flex-direction:column;align-items:flex-start;gap:9px;min-width:0;padding:16px;border:1px solid #445247;border-radius:9px;background:#1b241e}
+.chord-source label,.chord-manual label,.chord-patterns legend,.chord-bpm{font-size:.89rem;font-weight:750;color:#e3eddd}
+.chord-source input{max-width:100%;color:#d9e6d4;font-size:.86rem}
+.chord-source input::file-selector-button{border:1px solid #60735c;border-radius:6px;background:#344534;color:#ecf4e8;padding:8px;margin-right:8px;cursor:pointer}
+.chord-source small,.chord-manual small{font-size:.77rem;color:#9faf9e;line-height:1.55}
+.chord-manual input,.chord-manual textarea,.chord-bpm input{width:100%;border:1px solid #60735c;border-radius:6px;background:#111b15;color:#f1f7eb;padding:10px;font-size:.91rem}
+.chord-manual textarea{resize:vertical;min-height:96px;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;line-height:1.6}
+.chord-manual kbd{font-family:inherit;color:#e4f7b8}
+.chord-options{display:flex;align-items:flex-end;gap:14px;flex-wrap:wrap}
+.chord-patterns{border:0;padding:0;margin:0;display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:9px;flex:1;min-width: min(100%,600px)}
+.chord-patterns legend{padding:0;margin:0 0 8px}
+.chord-pattern{display:flex;align-items:flex-start;gap:9px;padding:13px;min-height:88px;border:1px solid #4b5b4d;border-radius:8px;background:#273329;cursor:pointer}
+.chord-pattern:has(input:checked){border-color:#c9ed6f;background:#33442e}
+.chord-pattern input{accent-color:#c9ed6f;margin:3px 0 0;flex:none}
+.chord-pattern strong,.chord-pattern small{display:block}
+.chord-pattern strong{font-size:.87rem;color:#e9f2e5;margin-bottom:4px}
+.chord-pattern small{font-size:.76rem;color:#aabbaa;line-height:1.5}
+.chord-bpm{display:flex;align-items:center;gap:8px;white-space:nowrap}
+.chord-bpm input{width:74px;text-align:center}
+.chord-output-row{display:flex;gap:8px;flex-wrap:wrap}
+.chord-output-row .button{display:inline-flex;align-items:center;justify-content:center;text-decoration:none}
+.chord-output-row [hidden]{display:none}
+.chord-converter button:disabled{opacity:.55;cursor:wait}
+.chord-summary{border-top:1px solid #415043;padding-top:13px}
+.chord-summary h3{font-size:.9rem;margin:0 0 9px;color:#e4efdc}
+.chord-summary-list{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:7px;max-height:220px;overflow:auto}
+.chord-summary-item{padding:9px 10px;border-radius:6px;background:#263429;border:1px solid #425344;font-size:.78rem;line-height:1.5}
+.chord-summary-item strong{display:block;color:#d7efb0;font-size:.84rem}
+.chord-summary-item span{color:#b9cab7}
+@media(max-width:900px){.chord-input-grid{grid-template-columns:1fr}.chord-patterns{grid-template-columns:1fr}.chord-pattern{min-height:0}.chord-options{align-items:flex-start;flex-direction:column}}
+@media(max-width:680px){.chord-converter{padding:15px}.chord-output-row .button{width:100%}}

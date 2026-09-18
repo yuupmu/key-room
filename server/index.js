@@ -1,9 +1,19 @@
 import { createServer } from 'node:http';
+import { existsSync } from 'node:fs';
 import { readFile, stat } from 'node:fs/promises';
 import { dirname, extname, isAbsolute, join, relative, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { DEFAULT_SCORE_MODEL, handleScoreToMidi } from './score-to-midi.js';
+import { handleSongSearch, SONG_SEARCH_MODEL } from './song-search.js';
+import { handleUnfoldScore } from './unfold-score.js';
+import { handleChordChart, handleChordArrangement } from './chord-to-score.js';
 
 const projectRoot = join(dirname(fileURLToPath(import.meta.url)), '..');
+const envFile = join(projectRoot, '.env');
+if (existsSync(envFile)) {
+  if (typeof process.loadEnvFile !== 'function') throw new Error('.env 사용에는 Node.js 20.12 이상이 필요합니다.');
+  process.loadEnvFile(envFile);
+}
 const development = process.argv.includes('--dev');
 const publicDir = join(projectRoot, development ? 'src/client' : 'dist');
 const host = process.env.HOST || '127.0.0.1';
@@ -19,6 +29,7 @@ const types = {
   '.jpg': 'image/jpeg',
   '.jpeg': 'image/jpeg',
   '.ico': 'image/x-icon',
+  '.mp3': 'audio/mpeg',
   '.woff2': 'font/woff2'
 };
 
@@ -28,6 +39,26 @@ function respond(response, status, text) {
 }
 
 const server = createServer(async (request, response) => {
+  if (request.url?.split('?')[0] === '/api/score-to-midi') {
+    await handleScoreToMidi(request, response);
+    return;
+  }
+  if (request.url?.split('?')[0] === '/api/song-search') {
+    await handleSongSearch(request, response);
+    return;
+  }
+  if (request.url?.split('?')[0] === '/api/unfold-score') {
+    await handleUnfoldScore(request, response);
+    return;
+  }
+  if (request.url?.split('?')[0] === '/api/chord-chart') {
+    await handleChordChart(request, response);
+    return;
+  }
+  if (request.url?.split('?')[0] === '/api/chord-arrangement') {
+    await handleChordArrangement(request, response);
+    return;
+  }
   if (request.method !== 'GET' && request.method !== 'HEAD') {
     respond(response, 405, 'Method not allowed');
     return;
@@ -43,26 +74,25 @@ const server = createServer(async (request, response) => {
 
   if (pathname === '/health') {
     response.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' });
-    response.end(request.method === 'HEAD' ? undefined : JSON.stringify({ status: 'ok', mode: development ? 'development' : 'production' }));
+    response.end(request.method === 'HEAD' ? undefined : JSON.stringify({ status: 'ok', mode: development ? 'development' : 'production', scoreApi: true, scoreModel: process.env.OPENAI_SCORE_MODEL || DEFAULT_SCORE_MODEL, unfoldScoreApi: true, unfoldScoreModel: 'gpt-5.6-luna', unfoldScoreReasoning: 'high', songSearchApi: true, songSearchModel: SONG_SEARCH_MODEL, songSearchReasoning: 'high', apiKeyConfigured: !!process.env.OPENAI_API_KEY }));
     return;
   }
 
-  const filePath = join(publicDir, pathname === '/' ? 'index.html' : pathname.replace(/^\/+/, ''));
-  const relativePath = relative(publicDir, filePath);
+  const publicPath = join(publicDir, pathname === '/' ? 'index.html' : pathname.replace(/^\/+/, ''));
+  const relativePath = relative(publicDir, publicPath);
   if (isAbsolute(relativePath) || relativePath === '..' || relativePath.startsWith(`..${sep}`)) {
     respond(response, 403, 'Forbidden');
     return;
   }
-
   try {
-    const info = await stat(filePath);
+    const info = await stat(publicPath);
     if (!info.isFile()) {
       respond(response, 404, 'Not found');
       return;
     }
-    const body = await readFile(filePath);
+    const body = await readFile(publicPath);
     response.writeHead(200, {
-      'Content-Type': types[extname(filePath).toLowerCase()] || 'application/octet-stream',
+      'Content-Type': types[extname(publicPath).toLowerCase()] || 'application/octet-stream',
       'Content-Length': body.length,
       'Cache-Control': development ? 'no-store' : 'public, max-age=300'
     });
@@ -75,4 +105,5 @@ const server = createServer(async (request, response) => {
 server.listen(port, host, () => {
   console.log(`Keyroom ${development ? 'development' : 'production'} server`);
   console.log(`Local: http://${host}:${port}`);
+  console.log(`Score API: ${process.env.OPENAI_SCORE_MODEL || DEFAULT_SCORE_MODEL} (${process.env.OPENAI_API_KEY ? 'API key configured' : 'API key missing'})`);
 });

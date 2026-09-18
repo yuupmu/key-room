@@ -1,0 +1,14 @@
+.score-converter{display:flex;align-items:center;justify-content:space-between;gap:24px;flex-wrap:wrap;padding:19px 21px}
+.score-converter h2{margin:0;font-size:1.08rem;letter-spacing:-.02em}
+.score-converter p{margin:7px 0 0;color:#a6b5a4;font-size:.8rem;line-height:1.5}
+.score-converter #scoreConvertStatus{color:#c7d8bc}
+.score-converter #unfoldStatus{color:#c7d8bc}
+.score-convert-form{display:flex;align-items:center;gap:9px;flex-wrap:wrap}
+.score-convert-form label{font-size:.78rem;font-weight:700;color:#b4c2b0}
+.score-convert-form input{max-width:230px;color:#dce8d7;font-size:.78rem}
+.score-convert-form input::file-selector-button{margin-right:8px;padding:8px;border:1px solid #5c705a;border-radius:6px;background:#344234;color:#e4f0dd;cursor:pointer}
+.score-convert-form .button{white-space:nowrap;text-decoration:none;display:inline-flex;align-items:center;justify-content:center}
+.score-convert-form #scoreDownload[hidden]{display:none}
+.score-convert-form #unfoldDownload[hidden]{display:none}
+.score-convert-form .button:disabled{opacity:.6;cursor:wait}
+@media(max-width:680px){.score-converter{padding:15px}.score-convert-form{width:100%}.score-convert-form input{max-width:100%;width:100%}}

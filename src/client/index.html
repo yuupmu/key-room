@@ -7,7 +7,15 @@
   <meta name="description" content="오디오와 MIDI를 맞춰 듣고 편집하며 연습하는 밴드 키보드 작업 공간">
   <title>밴드 키보드 연습실</title>
   <link rel="stylesheet" href="./styles.css">
+  <link rel="stylesheet" href="./score-converter.css">
+  <link rel="stylesheet" href="./chord-converter.css">
+  <link rel="stylesheet" href="./song-search.css">
+  <script src="./tone.js" defer></script>
   <script src="./app.js" defer></script>
+  <script src="./score-converter.js" defer></script>
+  <script src="./chord-converter.js" defer></script>
+  <script src="./unfold-score.js" defer></script>
+  <script src="./song-search.js" defer></script>
 </head>
 <body>
   <div class="app-shell">
@@ -27,42 +35,127 @@
         </div>
         <div class="transport-settings">
           <label class="tempo-control" for="speedSelect"><span>속도</span><select id="speedSelect" aria-label="재생 속도"><option value="0.5">50%</option><option value="0.75">75%</option><option value="0.9">90%</option><option value="1" selected>100%</option><option value="1.1">110%</option><option value="1.25">125%</option></select></label>
-          <div class="bpm-display"><span>BPM</span><strong id="bpmValue">—</strong></div>
+          <label class="bpm-display" for="originalBpmInput"><span>원본 BPM</span><input id="originalBpmInput" type="number" min="30" max="300" step="1" placeholder="입력" aria-label="원본 BPM, MIDI 파일에서 자동 설정"></label>
+          <label class="bpm-display" for="bpmInput"><span>재생 BPM</span><input id="bpmInput" type="number" min="30" max="300" step="1" value="120" aria-label="재생 BPM"></label>
         </div>
       </section>
 
       <section class="arrangement panel" aria-labelledby="arrangementTitle">
-        <div class="section-heading"><div><div class="eyebrow">01 / ARRANGEMENT</div><h1 id="arrangementTitle">연습 타임라인</h1></div><span class="section-hint">트랙을 눌러 편집 · 파일은 끌어다 놓기</span></div>
+        <div class="section-heading"><div><div class="eyebrow">01 / ARRANGEMENT</div><h1 id="arrangementTitle">연습 타임라인</h1></div><div class="timeline-heading-actions"><button class="button button-soft metronome-toggle" id="metronomeToggle" type="button" aria-pressed="false" aria-label="메트로놈 켜기">♩ 메트로놈 켜기</button><span class="section-hint">트랙을 눌러 편집 · 파일은 끌어다 놓기</span></div></div>
         <div class="timeline">
           <div class="track-head ruler-head">TRACKS</div><div class="ruler" id="ruler" aria-hidden="true"></div>
-          <div class="track-head"><span class="track-icon audio-icon">♫</span><span class="track-label"><strong>원곡 오디오</strong><small>MP3 · WAV</small></span><button class="track-mute" id="audioMute" type="button" aria-pressed="false" aria-label="원곡 오디오 음소거">M</button></div>
-          <div class="track-lane audio-lane drop-target" id="audioDrop" role="button" tabindex="0" aria-label="원곡 오디오 추가 또는 편집"><div class="track-empty" id="audioEmpty"><span class="empty-plus">＋</span><span>원곡 오디오를 놓으세요</span><small>MP3 또는 WAV</small></div><canvas id="waveform" class="waveform" aria-hidden="true"></canvas><div class="clip-name" id="audioClipName"></div><div class="playhead" aria-hidden="true"></div></div>
-          <div class="track-head"><span class="track-icon midi-icon">▦</span><span class="track-label"><strong>악보 또는 MIDI</strong><small>MIDI · .mid</small></span><button class="track-mute" id="midiMute" type="button" aria-pressed="false" aria-label="MIDI 음소거">M</button></div>
-          <div class="track-lane midi-lane drop-target" id="midiDrop" role="button" tabindex="0" aria-label="MIDI 추가 또는 편집"><div class="track-empty" id="midiEmpty"><span class="empty-plus">＋</span><span>악보 또는 MIDI를 놓으세요</span><small>지금은 MIDI 파일을 넣을 수 있어요</small></div><div id="midiOverview" class="midi-overview" aria-hidden="true"></div><div class="clip-name" id="midiClipName"></div><div class="playhead" aria-hidden="true"></div></div>
+          <div id="trackRows" class="track-rows"></div>
         </div>
-        <div class="timeline-footer"><div class="file-summary" id="fileSummary">오디오와 MIDI를 추가하면 함께 재생됩니다.</div><button class="text-button" id="clearFiles" type="button">파일 모두 비우기</button></div>
+        <div class="timeline-footer"><div class="track-add-actions"><button class="button button-outline" id="addAudioTrack" type="button">＋ 오디오 트랙</button><button class="button button-outline" id="addMidiTrack" type="button">＋ MIDI 트랙</button></div><div class="file-summary" id="fileSummary">오디오와 MIDI를 추가하면 함께 재생됩니다.</div><button class="text-button" id="clearFiles" type="button">파일 모두 비우기</button></div>
+      </section>
+
+      <section class="midi-input panel" aria-labelledby="midiInputTitle">
+        <div class="midi-input-heading"><div><div class="eyebrow">LIVE MIDI</div><h2 id="midiInputTitle">전자피아노 연결</h2><p>USB/MIDI로 연결한 건반을 웹에서 인식합니다. 원곡과 가이드 MIDI를 재생하며 함께 연주하세요.</p></div><button class="button button-primary" id="connectMidi" type="button">MIDI 장치 연결</button></div>
+        <div class="midi-input-controls"><label for="midiDevice">입력 장치</label><select id="midiDevice" disabled><option value="">연결된 장치 없음</option></select><span class="midi-input-status" id="midiStatus" role="status" aria-live="polite">연결 대기 중</span></div>
+        <p class="piano-credit">피아노 음원: <a href="https://github.com/Tonejs/audio/tree/master/salamander" target="_blank" rel="noopener noreferrer">Salamander Grand Piano</a> · Alexander Holm · <a href="https://creativecommons.org/licenses/by/3.0/" target="_blank" rel="noopener noreferrer">CC BY 3.0</a></p>
+        <div class="midi-live-row"><span class="midi-live-label">지금 누르는 음</span><div class="midi-live-notes" id="liveNotes" aria-hidden="true"><span class="midi-live-empty">건반을 누르면 음이 표시됩니다.</span></div><span class="visually-hidden" id="liveNoteText" role="status" aria-live="polite">누르는 음 없음</span></div>
+        <div class="midi-take-row"><div><strong>내 연주</strong><span id="performanceStatus">재생 중 연주를 기록하면 가이드 위에 주황색으로 표시됩니다.</span></div><div class="midi-take-actions"><button class="button button-soft" id="recordPerformance" type="button" aria-pressed="false" disabled>● 연주 기록</button><button class="button button-outline" id="clearPerformance" type="button" disabled>기록 지우기</button><button class="button button-outline" id="downloadPerformance" type="button" disabled>내 연주 MIDI</button></div></div>
+      </section>
+
+      <section class="score-converter panel" aria-labelledby="scoreConvertTitle">
+        <div><div class="eyebrow">SCORE TO MIDI</div><h2 id="scoreConvertTitle">악보를 MIDI로 변환</h2><p>음높이와 마디별 박자를 확인해 MIDI를 만듭니다. 선명한 악보를 사용해 주세요. 악보는 AI 판독을 위해 OpenAI API로 전송됩니다.</p><p id="scoreConvertStatus" role="status" aria-live="polite">PNG · JPEG · PDF, 최대 8MB</p></div>
+        <form id="scoreConvertForm" class="score-convert-form">
+          <label for="scoreInput">악보 파일</label><input id="scoreInput" type="file" accept=".png,.jpg,.jpeg,.pdf,image/png,image/jpeg,application/pdf" required>
+          <button class="button button-primary" id="scoreConvertButton" type="submit">MIDI 변환</button>
+          <a class="button button-outline" id="scoreDownload" href="#" download="score.mid" hidden>MIDI 다운로드</a>
+        </form>
+      </section>
+
+      <section class="chord-converter panel" aria-labelledby="chordConvertTitle">
+        <div class="eyebrow">CHORDS TO SCORE / MIDI</div>
+        <h2 id="chordConvertTitle">코드를 악보, MIDI로 변환</h2>
+        <p class="chord-intro">코드만 알아도 양손 연주 예시를 만들 수 있어요. 코드 악보를 읽어 오거나 직접 입력한 뒤, 코드와 마디 배치를 확인해 주세요.</p>
+        <div class="chord-input-grid">
+          <div class="chord-source">
+            <label for="chordChartInput">코드 악보 · 가사/코드 악보</label>
+            <input id="chordChartInput" type="file" accept=".png,.jpg,.jpeg,.pdf,image/png,image/jpeg,application/pdf">
+            <button class="button button-outline" id="readChordChart" type="button">악보에서 코드 읽기</button>
+            <small>PNG · JPEG · PDF, 최대 8MB. 이미지 판독에 OpenAI API를 사용합니다.</small>
+          </div>
+          <div class="chord-manual">
+            <label for="chordTitle">제목</label>
+            <input id="chordTitle" type="text" maxlength="100" placeholder="코드 연주 예시">
+            <label for="chordProgression">코드와 마디</label>
+            <textarea id="chordProgression" rows="4" spellcheck="false" placeholder="F | C/E | Dm7 | B♭M7"></textarea>
+            <small><kbd>|</kbd> 또는 줄바꿈으로 마디를 나눕니다. 한 마디에 코드가 둘이면 <kbd>Dm7 G7</kbd>처럼 적으세요. 구분 없이 나열하면 코드 하나를 한 마디로 봅니다.</small>
+          </div>
+        </div>
+        <div class="chord-options">
+          <fieldset class="chord-patterns">
+            <legend>연주 방식</legend>
+            <label class="chord-pattern"><input type="radio" name="chordPattern" value="hold" checked><span><strong>길게 누르기</strong><small>예: 왼손 낮은 도 + 오른손 도·미·솔을 함께 누르고 유지</small></span></label>
+            <label class="chord-pattern"><input type="radio" name="chordPattern" value="alternate"><span><strong>양손 번갈아 치기</strong><small>1·3박 왼손, 2·4박 오른손 화음</small></span></label>
+            <label class="chord-pattern"><input type="radio" name="chordPattern" value="arpeggio"><span><strong>한 음씩 펼쳐 치기</strong><small>왼손 저음 유지, 오른손은 도→미→솔→미 순서</small></span></label>
+          </fieldset>
+          <label class="chord-bpm" for="chordBpm">BPM <input id="chordBpm" type="number" min="30" max="300" step="1" value="120"></label>
+        </div>
+        <div class="chord-output-row"><button class="button button-primary" id="makeChordArrangement" type="button">악보 · MIDI 생성</button><a class="button button-outline" id="chordPdfDownload" href="#" download="chord-score.pdf" hidden>악보 PDF 다운로드</a><a class="button button-outline" id="chordMidiDownload" href="#" download="chord-arrangement.mid" hidden>MIDI 다운로드</a></div>
+        <p class="chord-status" id="chordStatus" role="status" aria-live="polite">마디 배치를 모르면 코드 하나당 4/4 한 마디로 시작합니다. 생성 전 입력을 수정할 수 있어요.</p>
+        <div class="chord-summary" id="chordSummary" hidden></div>
+      </section>
+
+      <section class="score-converter panel" aria-labelledby="unfoldTitle">
+        <div><div class="eyebrow">UNFOLD SCORE</div><h2 id="unfoldTitle">반복기호 없는 펼친 악보</h2><p>PDF 악보의 D.S.·D.C.·코다·1·2번 엔딩·반복기호를 실제 연주 순서로 펼칩니다. MIDI도 조성을 추론해 오선 악보로 만듭니다.</p><p id="unfoldStatus" role="status" aria-live="polite">PDF · MIDI, 최대 8MB</p></div>
+        <form id="unfoldForm" class="score-convert-form">
+          <label for="unfoldInput">악보 또는 MIDI</label><input id="unfoldInput" type="file" accept=".pdf,.mid,.midi,application/pdf,audio/midi" required>
+          <button class="button button-primary" id="unfoldButton" type="submit">악보 펼치기</button>
+          <a class="button button-outline" id="unfoldDownload" href="#" download="unfolded-score.pdf" hidden>PDF 다운로드</a>
+        </form>
       </section>
 
       <section class="workspace-actions panel" aria-label="연습 도구">
         <div class="action-intro"><div class="eyebrow">02 / PRACTICE</div><strong>연습 준비</strong><span>MIDI를 보며 치거나 트랙을 편집하세요.</span></div>
         <div class="action-buttons"><button class="button button-primary" id="openPlayView" type="button">▤ 보고 치기 열기</button><button class="button button-outline" id="openAudioEditor" type="button">♫ 오디오 편집</button><button class="button button-outline" id="openMidiEditor" type="button">▦ MIDI 편집</button></div>
-        <div class="future-actions"><button class="text-button" type="button" data-feature="악보 → MIDI 변환">악보 변환 · 준비 중</button><button class="text-button" type="button" data-feature="전자피아노 연결">전자피아노 연결 · 준비 중</button></div>
+        <div class="future-actions"><button class="text-button" id="jumpToMidiInput" type="button">전자피아노 연결</button></div>
       </section>
     </main>
   </div>
 
   <input id="audioInput" type="file" accept=".mp3,.wav,audio/mpeg,audio/wav" hidden>
   <input id="midiInput" type="file" accept=".mid,.midi,audio/midi" hidden>
-  <audio id="audioPlayer" preload="metadata"></audio>
 
-  <div class="overlay hidden" id="resourceOverlay" role="presentation"><div class="drawer" role="dialog" aria-modal="true" aria-labelledby="resourceTitle"><div class="drawer-header"><div><div class="eyebrow">RESOURCES</div><h2 id="resourceTitle">자료 추가</h2></div><button class="close-button" id="closeResources" type="button" aria-label="닫기">×</button></div><p>새 파일을 불러오면 현재 트랙의 파일이 교체됩니다.</p><button class="drawer-action" id="drawerAudio" type="button"><span>♫</span><strong>원곡 오디오 불러오기</strong><small>MP3 · WAV</small></button><button class="drawer-action" id="drawerMidi" type="button"><span>▦</span><strong>MIDI 파일 불러오기</strong><small>.mid · .midi</small></button><div class="drawer-future"><strong>곡 자료 검색</strong><p>악보 판매처, 영상, 보컬 음역, BPM 검색은 API 연결 단계에서 제공할 예정입니다.</p></div></div></div>
+  <div class="overlay hidden" id="resourceOverlay" role="presentation"><div class="drawer" role="dialog" aria-modal="true" aria-labelledby="resourceTitle"><div class="drawer-header"><div><div class="eyebrow">RESOURCES</div><h2 id="resourceTitle">자료 추가</h2></div><button class="close-button" id="closeResources" type="button" aria-label="닫기">×</button></div><p>새 트랙을 만들고 파일을 선택할 수 있습니다.</p><button class="drawer-action" id="drawerAudio" type="button"><span>♫</span><strong>오디오 트랙 추가</strong><small>MP3 · WAV</small></button><button class="drawer-action" id="drawerMidi" type="button"><span>▦</span><strong>MIDI 트랙 추가</strong><small>.mid · .midi</small></button><div class="drawer-future"><strong>곡 자료 검색</strong><p>곡명으로 악보 판매처와 연주·악보 영상을 찾아보세요.</p><button class="button button-outline" id="drawerSongSearch" type="button">곡 자료 찾기</button></div></div></div>
 
-  <div class="modal-overlay hidden" id="viewOverlay" role="presentation"><section class="modal-card play-modal" role="dialog" aria-modal="true" aria-labelledby="viewTitle"><div class="modal-header"><div><div class="eyebrow">PLAY VIEW</div><h2 id="viewTitle">보고 치기</h2></div><div class="modal-header-actions"><span class="modal-hint">스페이스바로 재생·일시정지</span><button class="close-button" id="closePlayView" type="button" aria-label="보고 치기 닫기">×</button></div></div><div class="tabs" role="tablist" aria-label="MIDI 보기 방식"><button class="tab active" id="tab-fall" type="button" role="tab" aria-selected="true" aria-controls="view-fall" data-view="fall">낙하 노트</button><button class="tab" id="tab-score" type="button" role="tab" aria-selected="false" aria-controls="view-score" data-view="score">악보</button><button class="tab" id="tab-roll" type="button" role="tab" aria-selected="false" aria-controls="view-roll" data-view="roll">피아노롤</button></div><div class="view-stage" id="view-fall" role="tabpanel" aria-labelledby="tab-fall"><canvas id="fallCanvas" aria-label="건반으로 내려오는 MIDI 음표"></canvas><div class="stage-empty" id="fallEmpty"><div class="stage-empty-icon">▤</div><strong>MIDI를 넣으면 다음에 칠 음이 보여요</strong><span>음의 길이와 건반 위치를 따라 연습하세요.</span></div></div><div class="view-stage hidden" id="view-score" role="tabpanel" aria-labelledby="tab-score"><div class="feature-preview"><div class="preview-staff" aria-hidden="true"><span>𝄞</span><i></i><i></i><i></i></div><strong>악보 보기는 다음 단계에서 연결됩니다</strong><p>악보 이미지 변환을 구현하면 이곳에 표시됩니다.</p></div></div><div class="view-stage hidden" id="view-roll" role="tabpanel" aria-labelledby="tab-roll"><canvas id="rollCanvas" aria-label="MIDI 음표의 음명과 길이를 보여주는 피아노롤"></canvas><div class="stage-empty" id="rollEmpty"><div class="stage-empty-icon">▦</div><strong>MIDI를 넣으면 음명과 길이가 보여요</strong><span>도♯4처럼 각 음의 이름을 확인할 수 있습니다.</span></div></div><div class="view-footer"><span class="legend"><i class="legend-right"></i> 오른손 / 높은 음역 <i class="legend-left"></i> 왼손 / 낮은 음역</span><span id="noteCount">MIDI 대기 중</span></div></section></div>
+  <div class="modal-overlay hidden" id="viewOverlay" role="presentation"><section class="modal-card play-modal" role="dialog" aria-modal="true" aria-labelledby="viewTitle"><div class="modal-header"><div><div class="eyebrow">PLAY VIEW</div><h2 id="viewTitle">보고 치기</h2></div><div class="modal-header-actions"><span class="modal-hint">스페이스바로 재생·일시정지</span><button class="close-button" id="closePlayView" type="button" aria-label="보고 치기 닫기">×</button></div></div><div class="tabs" role="tablist" aria-label="MIDI 보기 방식"><button class="tab active" id="tab-fall" type="button" role="tab" aria-selected="true" aria-controls="view-fall" data-view="fall">낙하 노트</button><button class="tab" id="tab-score" type="button" role="tab" aria-selected="false" aria-controls="view-score" data-view="score">악보</button><button class="tab" id="tab-roll" type="button" role="tab" aria-selected="false" aria-controls="view-roll" data-view="roll">피아노롤</button></div><div class="view-stage" id="view-fall" role="tabpanel" aria-labelledby="tab-fall"><div class="fall-canvas-scroll"><canvas id="fallCanvas" aria-label="건반으로 내려오는 MIDI 음표"></canvas></div><div class="fall-speed-indicator" role="status" aria-live="polite">낙하 속도 <strong id="fallSpeedLabel">1.0×</strong><span>스크롤: 위치 · ⌘+스크롤: 속도</span></div><div class="stage-empty" id="fallEmpty"><div class="stage-empty-icon">▤</div><strong>MIDI를 넣으면 다음에 칠 음이 보여요</strong><span>음의 길이와 건반 위치를 따라 연습하세요.</span></div></div><div class="view-stage hidden" id="view-score" role="tabpanel" aria-labelledby="tab-score"><div class="feature-preview"><div class="preview-staff" aria-hidden="true"><span>𝄞</span><i></i><i></i><i></i></div><strong>악보 보기는 다음 단계에서 연결됩니다</strong><p>악보 이미지 변환을 구현하면 이곳에 표시됩니다.</p></div></div><div class="view-stage hidden" id="view-roll" role="tabpanel" aria-labelledby="tab-roll"><canvas id="rollCanvas" aria-label="MIDI 음표의 음명과 길이를 보여주는 피아노롤"></canvas><div class="stage-empty" id="rollEmpty"><div class="stage-empty-icon">▦</div><strong>MIDI를 넣으면 음명과 길이가 보여요</strong><span>도♯4처럼 각 음의 이름을 확인할 수 있습니다.</span></div></div><div class="practice-timeline" aria-label="보고 치기 MIDI 탐색">
+  <div class="practice-timeline-top"><div><strong>MIDI 탐색</strong><span id="practiceTime">0:00 / 0:00</span></div><div class="practice-marker-actions"><button class="button button-soft" id="placePracticeFlag" type="button">⚑ 현재 위치에 플래그</button><button class="button button-outline" id="clearPracticeFlag" type="button" disabled>플래그 지우기</button></div></div>
+  <div class="practice-scrub-wrap"><div class="practice-scrub" id="practiceScrub" role="slider" tabindex="0" aria-label="보고 치기 재생 위치" aria-valuemin="0" aria-valuemax="0" aria-valuenow="0" aria-valuetext="0:00 / 0:00">
+    <div class="practice-beat-grid" id="practiceBeatGrid" aria-hidden="true"></div><div class="practice-midi-notes" id="practiceMidiNotes" aria-hidden="true"></div><div class="practice-scrub-empty" id="practiceScrubEmpty">MIDI를 넣으면 여기에서 곡 전체를 볼 수 있어요.</div>
+    <div class="practice-position" id="practicePosition" aria-hidden="true"></div>
+  </div><button class="practice-flag" id="practiceFlag" type="button" aria-label="시작 플래그를 드래그해 이동" hidden><span>시작</span></button>
+  </div>
+  <p class="practice-timeline-hint">막대를 드래그해 재생 위치 이동 · 플래그를 드래그해 시작점 조절 · 스페이스바: 플래그부터 재생 · Shift+스페이스바: 멈춘 곳에서 재생</p>
+</div><div class="view-footer"><span class="legend" id="fallLegend"><i class="legend-white"></i> 흰 건반 음 <i class="legend-black"></i> 검은 건반 음 <i class="legend-played"></i> 내가 누른 음</span><span class="legend hidden" id="rollLegend"><i class="legend-right"></i> 오른손 / 높은 음역 <i class="legend-left"></i> 왼손 / 낮은 음역 <i class="legend-played"></i> 내 연주</span><span id="noteCount">MIDI 대기 중</span></div></section></div>
 
-  <div class="modal-overlay hidden" id="audioEditOverlay" role="presentation"><section class="modal-card edit-modal audio-edit-modal" role="dialog" aria-modal="true" aria-labelledby="audioEditTitle"><div class="modal-header"><div><div class="eyebrow">AUDIO EDIT</div><h2 id="audioEditTitle">원곡 시작 부분 자르기</h2></div><button class="close-button" id="closeAudioEditor" type="button" aria-label="오디오 편집 닫기">×</button></div><p class="edit-description">앞부분을 건너뛰고 재생해 MIDI와 시작점을 맞춥니다. 원본 파일은 바뀌지 않습니다.</p><div class="trim-preview"><canvas id="trimWaveform" aria-label="오디오 시작 부분 선택"></canvas><div class="trim-caption"><span>원본 시작</span><span id="sourceDuration">0:00</span></div></div><div class="trim-controls"><label for="trimRange">잘라낼 앞부분</label><input id="trimRange" type="range" min="0" max="0" step="0.01" value="0"><div class="trim-numeric"><input id="trimSeconds" type="number" min="0" step="0.01" value="0" aria-label="잘라낼 앞부분 초"><span>초</span></div></div><div class="edit-info"><span>재생 시작 <strong id="trimStartLabel">0:00</strong></span><span>남는 길이 <strong id="trimRemaining">0:00</strong></span></div><div class="modal-footer"><button class="button button-outline" id="replaceAudio" type="button">다른 오디오 불러오기</button><button class="button button-soft" id="previewTrim" type="button">▶ 시작점 들어보기</button><button class="button button-soft" id="resetTrim" type="button">자르기 초기화</button><button class="button button-primary" id="applyTrim" type="button">적용하고 닫기</button></div></section></div>
+  <div class="modal-overlay hidden" id="audioEditOverlay" role="presentation"><section class="modal-card edit-modal audio-edit-modal" role="dialog" aria-modal="true" aria-labelledby="audioEditTitle"><div class="modal-header"><div><div class="eyebrow">AUDIO EDIT</div><h2 id="audioEditTitle">오디오 시작점 맞추기</h2></div><button class="close-button" id="closeAudioEditor" type="button" aria-label="오디오 편집 닫기">×</button></div><p class="edit-description">앞부분을 잘라내거나 공백을 넣어 MIDI와 시작점을 맞춥니다. 원본 파일은 바뀌지 않습니다.</p><div class="trim-preview"><canvas id="trimWaveform" aria-label="오디오 시작 부분 선택"></canvas><div class="trim-caption"><span>원본 시작</span><span id="sourceDuration">0:00</span></div></div><div class="trim-controls"><label for="trimRange">잘라낼 앞부분</label><input id="trimRange" type="range" min="0" max="0" step="0.01" value="0"><div class="trim-numeric"><input id="trimSeconds" type="number" min="0" step="0.01" value="0" aria-label="잘라낼 앞부분 초"><span>초</span></div></div><div class="trim-controls"><label for="leadInRange">추가할 앞부분 공백</label><input id="leadInRange" type="range" min="0" max="120" step="0.01" value="0"><div class="trim-numeric"><input id="leadInSeconds" type="number" min="0" max="120" step="0.01" value="0" aria-label="추가할 앞부분 공백 초"><span>초</span></div></div><div class="edit-info"><span>재생 시작 <strong id="trimStartLabel">0:00</strong></span><span>앞 공백 <strong id="leadInLabel">0:00</strong></span><span>전체 길이 <strong id="trimRemaining">0:00</strong></span></div><div class="modal-footer"><button class="button button-outline" id="replaceAudio" type="button">다른 오디오 불러오기</button><button class="button button-soft" id="previewTrim" type="button">▶ 시작점 들어보기</button><button class="button button-soft" id="resetTrim" type="button">편집 초기화</button><button class="button button-primary" id="applyTrim" type="button">적용하고 닫기</button></div></section></div>
 
-  <div class="modal-overlay hidden" id="midiEditOverlay" role="presentation"><section class="modal-card edit-modal midi-edit-modal" role="dialog" aria-modal="true" aria-labelledby="midiEditTitle"><div class="modal-header"><div><div class="eyebrow">MIDI EDIT</div><h2 id="midiEditTitle">MIDI 음표 편집</h2></div><button class="close-button" id="closeMidiEditor" type="button" aria-label="MIDI 편집 닫기">×</button></div><div class="midi-editor-toolbar"><div class="transpose-control"><span>전체 조옮김</span><button class="button button-soft" id="transposeDown" type="button" aria-label="전체 음을 반음 낮추기">− 1반음</button><button class="button button-soft" id="transposeUp" type="button" aria-label="전체 음을 반음 높이기">＋ 1반음</button></div><div class="editor-toolbar-right"><button class="button button-soft" id="undoMidi" type="button">실행 취소</button><button class="button button-outline" id="replaceMidi" type="button">다른 MIDI</button><button class="button button-primary" id="downloadMidi" type="button">MIDI 다운로드</button></div></div><p class="editor-help">음표를 눌러 수정·삭제하세요. 빈 공간을 두 번 누르면 해당 위치에 음표가 추가됩니다.</p><div class="editor-navigator"><label for="editorWindow">보이는 구간 <strong id="editorWindowLabel">0:00–0:08</strong></label><input id="editorWindow" type="range" min="0" max="0" step="0.25" value="0"></div><div class="editor-scroll"><div id="editorGrid" class="editor-grid" role="grid" aria-label="편집 가능한 MIDI 피아노롤"></div></div><form id="noteForm" class="note-form"><div class="note-form-heading"><strong id="noteFormTitle">음표 추가</strong><span id="selectedNoteHint">값을 정한 뒤 추가하세요.</span></div><div class="note-fields"><label>음 높이<select id="notePitch" aria-label="음 높이"></select></label><label>시작(초)<input id="noteStart" type="number" min="0" step="0.01" value="0" required></label><label>길이(초)<input id="noteDuration" type="number" min="0.05" step="0.01" value="0.5" required></label><label>손<select id="noteHand"><option value="right">오른손</option><option value="left">왼손</option></select></label></div><div class="note-form-actions"><button class="button button-primary" id="saveNote" type="submit">음표 추가</button><button class="button button-soft hidden" id="deleteNote" type="button">선택한 음표 삭제</button><button class="button button-soft hidden" id="cancelNote" type="button">선택 해제</button></div></form><div class="editor-footer"><span id="editNoteCount">0개 음표</span><button class="button button-outline" id="doneMidi" type="button">편집 마치기</button></div></section></div>
+  <div class="modal-overlay hidden" id="midiEditOverlay" role="presentation">
+    <section class="modal-card edit-modal midi-edit-modal" role="dialog" aria-modal="true" aria-labelledby="midiEditTitle">
+      <div class="modal-header"><div><div class="eyebrow">MIDI EDIT</div><h2 id="midiEditTitle">MIDI 음표 편집</h2></div><button class="close-button" id="closeMidiEditor" type="button" aria-label="MIDI 편집 닫기">×</button></div>
+      <div class="midi-editor-toolbar">
+        <label class="editor-track-picker" for="editorTrack">편집 트랙<select id="editorTrack"></select></label>
+        <div class="transpose-control"><span>전체 조옮김</span><button class="button button-soft" id="transposeDown" type="button" aria-label="전체 음을 반음 낮추기">− 1반음</button><button class="button button-soft" id="transposeUp" type="button" aria-label="전체 음을 반음 높이기">＋ 1반음</button></div>
+        <div class="editor-toolbar-right"><button class="button button-soft" id="undoMidi" type="button">실행 취소</button><button class="button button-outline" id="replaceMidi" type="button">다른 MIDI</button><button class="button button-primary" id="downloadMidi" type="button">MIDI 다운로드</button></div>
+      </div>
+      <p class="editor-help">음표 드래그: 시간·높이 이동 · 오른쪽 끝 드래그: 길이 조절 · 빈 칸 두 번 클릭: 추가 · Delete: 삭제 · 가운데 버튼 드래그: 사방 이동 · +/- 또는 ⌘/Ctrl+스크롤: 시간 확대·축소 · Alt +/-: 건반 확대·축소</p>
+      <div class="editor-navigator"><label for="editorWindow">보이는 구간 <strong id="editorWindowLabel">0:00–0:08</strong></label><input id="editorWindow" type="range" min="0" max="0" step="0.01" value="0"><div class="editor-zoom"><button id="editorZoomOut" type="button" aria-label="시간 축 축소">−</button><span id="editorZoomLabel">8초</span><button id="editorZoomIn" type="button" aria-label="시간 축 확대">＋</button></div></div>
+      <div class="editor-scroll" id="editorScroll" tabindex="0" aria-label="MIDI 피아노롤, 가운데 버튼으로 이동"><div id="editorGrid" class="editor-grid" role="group" aria-label="편집 가능한 MIDI 피아노롤"></div></div>
+      <div class="editor-footer"><span id="editNoteCount">0개 음표</span><span id="selectedNoteInfo">음표를 선택하거나 빈 칸을 두 번 클릭하세요.</span><button class="button button-outline" id="doneMidi" type="button">편집 마치기</button></div>
+    </section>
+  </div>
 
+  <aside class="song-assistant" aria-label="곡 자료 검색 도우미">
+    <section class="song-assistant-panel" id="songAssistantPanel" role="dialog" aria-labelledby="songAssistantTitle" hidden>
+      <header class="song-assistant-header"><div><span class="song-assistant-kicker">KEY/ROOM · SEARCH</span><h2 id="songAssistantTitle">곡 자료 검색</h2></div><button class="song-assistant-close" id="songAssistantClose" type="button" aria-label="곡 자료 검색 닫기">×</button></header>
+      <div class="song-assistant-content" id="songAssistantContent" role="status" aria-live="polite"><p class="song-assistant-intro">곡명을 입력하면 악보 판매처와 연주·악보 영상을 찾고, 확인된 BPM과 보컬 음역을 보여드려요.</p><p class="song-assistant-tip">아티스트를 함께 적으면 같은 제목의 다른 곡을 구분하기 쉽습니다.</p></div>
+      <form id="songAssistantForm" class="song-assistant-form"><label for="songAssistantInput">곡명 · 아티스트</label><div class="song-assistant-input-row"><input id="songAssistantInput" type="search" placeholder="예: 잔나비 주저하는 연인들을 위해" maxlength="160" autocomplete="off" required><button id="songAssistantSubmit" type="submit" aria-label="곡 검색">찾기</button></div></form>
+    </section>
+    <button class="song-assistant-launcher" id="songAssistantLauncher" type="button" aria-expanded="false" aria-controls="songAssistantPanel"><span class="song-assistant-launcher-icon" aria-hidden="true">♫</span><span>곡 자료 찾기</span></button>
+  </aside>
   <div class="toast" id="toast" role="status" aria-live="polite"></div>
 </body>
 </html>
