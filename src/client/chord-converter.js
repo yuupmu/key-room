@@ -40,7 +40,7 @@
   }
   async function responseJson(response) {
     const data = await response.json().catch(() => null);
-    if (!data) throw new Error(response.status === 404 || response.status === 405 ? '서버를 다시 시작해 새 변환 기능을 적용해 주세요.' : `서버 응답을 읽지 못했습니다. (HTTP ${response.status})`);
+    if (!data) throw new Error(response.status === 404 || response.status === 405 ? '이 배포 환경에는 악보 판독 서버가 없습니다. 로컬 서버에서 파일을 읽거나 코드를 직접 입력해 주세요.' : `서버 응답을 읽지 못했습니다. (HTTP ${response.status})`);
     if (!response.ok) throw new Error(data.error || `요청에 실패했습니다. (HTTP ${response.status})`);
     return data;
   }
@@ -200,8 +200,11 @@
     status.textContent = '코드 구성음으로 양손 악보와 MIDI를 만들고 있습니다.';
     try {
       const response = await fetch('/api/chord-arrangement', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ progression, bpm, pattern, title: titleInput.value.trim() }) });
-      const result = await responseJson(response);
-      const pdf = fromBase64(result.pdfBase64, 'application/pdf');
+      const offline = (response.status === 404 || response.status === 405) && /\.chatgpt\.site$/.test(location.hostname);
+      const result = offline
+        ? await (await import('./chord-offline.js')).buildOfflineArrangement({ progression, bpm, pattern, title: titleInput.value.trim() })
+        : await responseJson(response);
+      const pdf = offline ? new Blob([result.pdf], { type: 'application/pdf' }) : fromBase64(result.pdfBase64, 'application/pdf');
       if (!result.rightMidiBase64 || !result.leftMidiBase64) throw new Error('양손 MIDI를 받지 못했습니다. 서버를 다시 시작해 주세요.');
       const right = fromBase64(result.rightMidiBase64, 'audio/midi');
       const left = fromBase64(result.leftMidiBase64, 'audio/midi');

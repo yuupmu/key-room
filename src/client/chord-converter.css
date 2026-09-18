@@ -6,6 +6,7 @@
 .demo-link:focus-visible{outline:2px solid #c9ed6f;outline-offset:3px}
 .chord-converter>.demo-link{margin-top:-10px}
 .score-converter .demo-link{margin-top:7px}
+.arrangement .demo-link{margin-top:7px}
 .chord-demo-file-label[hidden]{display:none}
 .chord-demo-file-label{margin-top:-5px;color:#d7efb0;font-size:.78rem;font-weight:700}
 .chord-input-grid{display:grid;grid-template-columns:minmax(240px,.8fr) minmax(320px,1.2fr);gap:15px}

@@ -1001,6 +1001,29 @@
   el.midiInput.addEventListener('change',event=>{if(event.target.files[0])loadMidi(event.target.files[0],state.fileTarget||midiTracks().find(track=>!track.file)?.id||createTrack('midi').id)});
   const importingMidiTracks=new Set();
   window.addEventListener('keyroom:import-midi',event=>{const {file,hand}=event.detail||{};if(file){const track=midiTracks().find(item=>!item.file&&!importingMidiTracks.has(item.id))||createTrack('midi');importingMidiTracks.add(track.id);loadMidi(file,track.id,hand).finally(()=>importingMidiTracks.delete(track.id))}});
+  window.addEventListener('keyroom:load-practice-example',async event=>{
+    const {audio,right,left,leadIn=0.75,label='운명의 꽃',resolve,reject}=event.detail||{};
+    if(!(audio instanceof File)||!(right instanceof File)||!(left instanceof File))return;
+    try{
+      clearFiles();
+      const audioTrack=audioTracks().find(track=>!track.file)||createTrack('audio');
+      await loadAudio(audio,audioTrack.id);
+      if(audioTrack.file!==audio)throw Error('예제 음원을 불러오지 못했습니다.');
+      audioTrack.leadIn=clamp(Number(leadIn)||0,0,120);
+      const rightTrack=midiTracks().find(track=>!track.file)||createTrack('midi');
+      await loadMidi(right,rightTrack.id,'right');
+      if(rightTrack.file!==right)throw Error('오른손 MIDI를 불러오지 못했습니다.');
+      const leftTrack=midiTracks().find(track=>!track.file)||createTrack('midi');
+      await loadMidi(left,leftTrack.id,'left');
+      if(leftTrack.file!==left)throw Error('왼손 MIDI를 불러오지 못했습니다.');
+      state.position=0;
+      refreshSummary();
+      toast(`${label} 예제를 불러왔습니다. 음원 앞 공백 ${audioTrack.leadIn.toFixed(2)}초가 적용됐습니다.`);
+      resolve?.();
+    }catch(error){
+      reject?.(error instanceof Error?error:Error('예제를 불러오지 못했습니다.'));
+    }
+  });
   document.addEventListener('dragover',event=>event.preventDefault());
   document.addEventListener('drop',event=>{event.preventDefault();if(event.target.closest('.drop-target'))return;importDroppedFiles(event.dataTransfer.files)});
 

@@ -98,6 +98,8 @@ const server = createServer(async (request, response) => {
   }
   const publicPath = development && pathname === '/signalsmith-stretch.mjs'
     ? join(projectRoot, 'node_modules', 'signalsmith-stretch', 'SignalsmithStretch.mjs')
+    : development && pathname === '/pdf-lib.min.js'
+    ? join(projectRoot, 'node_modules', 'pdf-lib', 'dist', 'pdf-lib.min.js')
     : requestedPath;
   try {
     const info = await stat(publicPath);
