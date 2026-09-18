@@ -1,0 +1,19 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "type": "node",
+      "request": "launch",
+      "name": "Keyroom 개발 서버",
+      "program": "${workspaceFolder}/server/index.js",
+      "args": ["--dev"],
+      "cwd": "${workspaceFolder}",
+      "env": { "PORT": "3000" },
+      "serverReadyAction": {
+        "pattern": "Local: (http://127\\.0\\.0\\.1:[0-9]+)",
+        "uriFormat": "%s",
+        "action": "openExternally"
+      }
+    }
+  ]
+}

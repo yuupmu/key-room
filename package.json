@@ -1,0 +1,16 @@
+{
+  "name": "keyroom-band-practice",
+  "version": "0.2.0",
+  "private": true,
+  "type": "module",
+  "description": "Band keyboard practice workspace",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "dev": "node server/index.js --dev",
+    "build": "node scripts/build.mjs",
+    "start": "node server/index.js",
+    "check": "node --check src/client/app.js && node --check server/index.js && node --check scripts/build.mjs"
+  }
+}

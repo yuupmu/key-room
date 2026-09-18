@@ -1,0 +1,12 @@
+import { cp, mkdir, rm } from 'node:fs/promises';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+const projectRoot = join(dirname(fileURLToPath(import.meta.url)), '..');
+const sourceDir = join(projectRoot, 'src', 'client');
+const outputDir = join(projectRoot, 'dist');
+
+await rm(outputDir, { recursive: true, force: true });
+await mkdir(outputDir, { recursive: true });
+await cp(sourceDir, outputDir, { recursive: true });
+console.log(`Built ${outputDir}`);
