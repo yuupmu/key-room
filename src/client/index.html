@@ -53,6 +53,12 @@
         <div class="timeline-footer"><div class="track-add-actions"><button class="button button-outline" id="addAudioTrack" type="button">＋ 오디오 트랙</button><button class="button button-outline" id="addMidiTrack" type="button">＋ MIDI 트랙</button></div><div class="timeline-marker-actions"><button class="button button-soft" id="placeTimelineFlag" type="button">⚑ 현재 위치에 플래그</button><button class="button button-outline" id="clearTimelineFlag" type="button" disabled>플래그 지우기</button></div><div class="file-summary" id="fileSummary">오디오와 MIDI를 추가하면 함께 재생됩니다.</div><button class="text-button" id="clearFiles" type="button">파일 모두 비우기</button></div>
       </section>
 
+      <section class="workspace-actions panel" aria-label="연습 도구">
+        <div class="action-intro"><div class="eyebrow">02 / PRACTICE</div><strong>연습 준비</strong><span>MIDI를 보며 치거나 트랙을 편집하세요.</span></div>
+        <div class="action-buttons"><button class="button button-primary" id="openPlayView" type="button">▤ 보고 치기 열기</button><button class="button button-outline" id="openAudioEditor" type="button">♫ 오디오 편집</button><button class="button button-outline" id="openMidiEditor" type="button">▦ MIDI 편집</button></div>
+        <div class="future-actions"><button class="text-button" id="jumpToMidiInput" type="button">연주 입력 설정</button></div>
+      </section>
+
       <section class="midi-input panel" aria-labelledby="midiInputTitle">
         <div class="midi-input-heading"><div><div class="eyebrow">LIVE MIDI</div><h2 id="midiInputTitle">연주 입력</h2><p>USB/MIDI 건반이나 노트북 키보드로 원곡과 가이드 MIDI에 맞춰 연주하세요.</p><button class="demo-link" id="keyboardDemo" type="button" aria-label="노트북 키보드 demo" aria-expanded="false" aria-controls="computerKeyboard">demo</button></div><button class="button button-primary" id="connectMidi" type="button">MIDI 장치 연결</button></div>
         <div class="midi-input-controls"><label for="midiDevice">입력 장치</label><select id="midiDevice" disabled><option value="">연결된 장치 없음</option></select><span class="midi-input-status" id="midiStatus" role="status" aria-live="polite">연결 대기 중</span></div>
@@ -62,6 +68,9 @@
         <div class="midi-take-row"><div><strong>내 연주</strong><span id="performanceStatus">재생 중 연주를 기록하면 가이드 위에 주황색으로 표시됩니다.</span></div><div class="midi-take-actions"><button class="button button-soft" id="recordPerformance" type="button" aria-pressed="false" disabled>● 연주 기록</button><button class="button button-outline" id="clearPerformance" type="button" disabled>기록 지우기</button><button class="button button-outline" id="downloadPerformance" type="button" disabled>내 연주 MIDI</button></div></div>
       </section>
 
+      <details class="resource-tools">
+        <summary class="resource-tools-summary panel"><strong>악보, 자료 만들기</strong><span aria-hidden="true">⌄</span></summary>
+        <div class="resource-tools-tree">
       <section class="score-converter panel" aria-labelledby="scoreConvertTitle">
         <div><div class="eyebrow">SCORE TO MIDI</div><h2 id="scoreConvertTitle">악보를 MIDI로 변환</h2><p>음높이와 마디별 박자를 확인해 MIDI를 만듭니다. 선명한 악보를 사용해 주세요. 악보는 AI 판독을 위해 OpenAI API로 전송됩니다.</p><button class="demo-link" id="scoreDemo" type="button" aria-label="악보 MIDI 변환 demo">demo</button><p id="scoreConvertStatus" role="status" aria-live="polite">PNG · JPEG · PDF, 최대 8MB</p></div>
         <form id="scoreConvertForm" class="score-convert-form">
@@ -128,12 +137,8 @@
           <a class="button button-outline" id="unfoldDownload" href="#" download="unfolded-score.pdf" hidden>PDF 다운로드</a>
         </form>
       </section>
-
-      <section class="workspace-actions panel" aria-label="연습 도구">
-        <div class="action-intro"><div class="eyebrow">02 / PRACTICE</div><strong>연습 준비</strong><span>MIDI를 보며 치거나 트랙을 편집하세요.</span></div>
-        <div class="action-buttons"><button class="button button-primary" id="openPlayView" type="button">▤ 보고 치기 열기</button><button class="button button-outline" id="openAudioEditor" type="button">♫ 오디오 편집</button><button class="button button-outline" id="openMidiEditor" type="button">▦ MIDI 편집</button></div>
-        <div class="future-actions"><button class="text-button" id="jumpToMidiInput" type="button">연주 입력 설정</button></div>
-      </section>
+        </div>
+      </details>
     </main>
   </div>
 

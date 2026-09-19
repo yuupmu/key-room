@@ -109,3 +109,11 @@ body.modal-open{overflow:hidden}
 .practice-track-button.active::before{background:#202522}
 .practice-midi-notes .practice-note{background:var(--midi-color,#a3df5c);box-shadow:0 0 5px var(--midi-color,#a3df5c)}
 .practice-midi-notes .practice-note.performed{background:#ffad72;box-shadow:0 0 5px #ffad7288}
+
+.resource-tools-summary{display:flex;align-items:center;gap:10px;padding:19px 21px;list-style:none;cursor:pointer}
+.resource-tools-summary::-webkit-details-marker{display:none}
+.resource-tools-summary strong{font-size:1rem}
+.resource-tools-summary span{color:#a8c767;font-size:1.2rem;transition:transform .2s}
+.resource-tools[open] .resource-tools-summary span{transform:rotate(180deg)}
+.resource-tools-tree{display:flex;flex-direction:column;gap:18px;margin-top:18px;padding-left:18px;border-left:2px solid #39443b}
+@media(max-width:680px){.resource-tools-tree{padding-left:10px}}
