@@ -148,85 +148,9 @@ export function chordMidi(bars, bpm) {
   };
 }
 
-function drawNote(ctx, note, x, bottom, staffBottomStep, length) {
-  const step = note.octave * 7 + STEPS.indexOf(note.step);
-  const y = bottom - (step - staffBottomStep) * 9;
-  for (let ledger = bottom + 18; ledger <= y; ledger += 18) {
-    ctx.beginPath(); ctx.moveTo(x - 17, ledger); ctx.lineTo(x + 17, ledger); ctx.stroke();
-  }
-  for (let ledger = bottom - 90; ledger >= y; ledger -= 18) {
-    ctx.beginPath(); ctx.moveTo(x - 17, ledger); ctx.lineTo(x + 17, ledger); ctx.stroke();
-  }
-  ctx.save(); ctx.translate(x, y); ctx.rotate(-0.32);
-  ctx.beginPath(); ctx.ellipse(0, 0, 11, 7, 0, 0, Math.PI * 2);
-  if (length >= 2) ctx.stroke(); else ctx.fill();
-  ctx.restore();
-  if (length < 4) { ctx.beginPath(); ctx.moveTo(x + 10, y); ctx.lineTo(x + 10, y - 44); ctx.stroke(); }
-  if (note.alter) {
-    ctx.font = '27px serif';
-    ctx.fillText(note.alter === 1 ? '♯' : note.alter === -1 ? '♭' : note.alter === 2 ? '𝄪' : '𝄫', x - 32, y + 9);
-  }
-}
-function drawStaff(ctx, y) {
-  ctx.strokeStyle = '#28313c'; ctx.lineWidth = 1.5;
-  for (const top of [y + 80, y + 220]) for (let line = 0; line < 5; line++) {
-    ctx.beginPath(); ctx.moveTo(83, top + line * 18); ctx.lineTo(1163, top + line * 18); ctx.stroke();
-  }
-  ctx.font = '70px "Apple Symbols", "Noto Music", serif';
-  ctx.fillText('𝄞', 89, y + 153); ctx.fillText('𝄢', 92, y + 290);
-  ctx.font = 'bold 28px sans-serif'; ctx.fillText('4', 120, y + 115); ctx.fillText('4', 120, y + 147);
-  ctx.fillText('4', 120, y + 255); ctx.fillText('4', 120, y + 287);
-}
-async function scorePdf(bars, bpm, title) {
-  check(globalThis.PDFLib?.PDFDocument && typeof document !== 'undefined', 'PDF 생성 도구를 불러오지 못했습니다. 페이지를 새로고침해 주세요.');
-  const pdf = await globalThis.PDFLib.PDFDocument.create();
-  const pageCount = Math.ceil(bars.length / 12);
-  for (let pageIndex = 0; pageIndex < pageCount; pageIndex++) {
-    const canvas = document.createElement('canvas');
-    canvas.width = 1240; canvas.height = 1754;
-    const ctx = canvas.getContext('2d');
-    check(ctx, '악보를 그릴 수 없습니다.');
-    ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, canvas.width, canvas.height);
-    ctx.fillStyle = '#17212a';
-    ctx.font = 'bold 46px "Noto Sans KR", sans-serif';
-    ctx.fillText(pageIndex ? `${title || '코드 연주 예시'} · ${pageIndex + 1}` : (title || '코드 연주 예시'), 83, 90, 1070);
-    ctx.font = '24px sans-serif'; ctx.fillText(`4/4  ·  ${bpm} BPM`, 85, 131);
-    const pageBars = bars.slice(pageIndex * 12, (pageIndex + 1) * 12);
-    for (let line = 0; line < Math.ceil(pageBars.length / 4); line++) {
-      const y = 195 + line * 485;
-      drawStaff(ctx, y);
-      for (let column = 0; column < 4; column++) {
-        const bar = pageBars[line * 4 + column];
-        if (!bar) break;
-        const left = 83 + column * 270;
-        ctx.font = '20px sans-serif'; ctx.fillStyle = '#68717a'; ctx.fillText(String(bar.number), left + 11, y + 35);
-        ctx.fillStyle = '#17212a';
-        for (const symbol of bar.symbols) {
-          ctx.font = 'bold 23px sans-serif';
-          ctx.fillText(symbol.text, left + 68 + symbol.beat * 46, y + 63, 120);
-        }
-        for (const [events, bottom, base] of [[bar.right, y + 152, 30], [bar.left, y + 292, 18]]) {
-          for (const event of events) {
-            const x = left + 68 + event.beat * 46;
-            if (!event.notes.length) { ctx.font = '26px serif'; ctx.fillText('𝄽', x - 10, bottom - 26); continue; }
-            for (const note of event.notes) drawNote(ctx, note, x, bottom, base, event.length);
-          }
-        }
-        ctx.beginPath(); ctx.moveTo(left + 270, y + 80); ctx.lineTo(left + 270, y + 292); ctx.stroke();
-      }
-    }
-    ctx.font = '20px sans-serif'; ctx.fillText(`${pageIndex + 1} / ${pageCount}`, 1080, 1690);
-    const image = await pdf.embedPng(canvas.toDataURL('image/png'));
-    const page = pdf.addPage([595.28, 841.89]);
-    page.drawImage(image, { x: 0, y: 0, width: 595.28, height: 841.89 });
-  }
-  return pdf.save();
-}
-
 export async function buildOfflineArrangement(options) {
   const bars = arrangeChords(options);
   const midi = chordMidi(bars, options.bpm);
-  const pdf = await scorePdf(bars, options.bpm, options.title);
-  return { ...midi, pdf, measureCount: bars.length, bpm: options.bpm,
+  return { ...midi, scoreRenderer: 'verovio', measureCount: bars.length, bpm: options.bpm,
     summary: bars.map(bar => ({ measure: bar.number, chords: bar.chords })) };
 }

@@ -4,7 +4,7 @@ import { searchSong } from './song-search.js';
 import { arrangeChords, chordMidi } from './chord-offline.js';
 import { ScoreProblem, finalizeReview, reviewScore, scoreToMidi } from './score.js';
 import { unfoldPdf } from './unfold.js';
-import { createChordScorePdf, createMidiScorePdf, guessMidiKey, MidiScoreError, readMidiScore } from './midi-score.js';
+import { createMidiScorePdf, guessMidiKey, MidiScoreError, readMidiScore } from './midi-score.js';
 
 const { PDFDocument } = pdfLib;
 
@@ -170,8 +170,7 @@ async function chordArrangement(request) {
   try { bars = arrangeChords(options); }
   catch (error) { throw new ApiProblem(error?.message || '코드 입력을 확인해 주세요.'); }
   const midi = chordMidi(bars, options.bpm);
-  const pdf = await createChordScorePdf(bars, options.title, options.bpm, pdfLib);
-  return reply({ ...midi, pdfBase64: base64(pdf), measureCount: bars.length, bpm: options.bpm,
+  return reply({ ...midi, scoreRenderer: 'verovio', measureCount: bars.length, bpm: options.bpm,
     summary: bars.map(bar => ({ measure: bar.number, chords: bar.chords })) });
 }
 async function songSearch(request, env) {

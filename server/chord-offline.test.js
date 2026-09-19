@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { parseMidi } from 'midi-file';
 import { arrangeChords, chordMidi } from '../src/client/chord-offline.js';
+import { chordMusicXml } from '../src/client/chord-engraver.js';
 import { buildChordArrangement } from './chord-to-score.js';
 import { scoreToMidi } from './score-to-midi.js';
 
@@ -25,4 +26,15 @@ test('static chord generator matches the server for all three playing patterns',
 test('static conversion does not turn uncertain or unsupported chords into notes', () => {
   assert.throws(() => arrangeChords({ progression: 'C | ? | G7' }), /\? 코드를 직접 입력/);
   assert.throws(() => arrangeChords({ progression: 'C | H7' }), /읽을 수 없습니다/);
+});
+
+test('hosted chord score is MusicXML for the same notation engraver used locally', () => {
+  const source = chordMusicXml({ progression: 'F | C/E | Am7/C# | Dm C | Bb', pattern: 'hold', bpm: 120, title: '음악은 참 이상하죠' });
+  assert.match(source, /<movement-title>음악은 참 이상하죠<\/movement-title>/);
+  assert.match(source, /<part-name>오른손<\/part-name>/);
+  assert.match(source, /<clef><sign>G<\/sign><line>2<\/line><\/clef>/);
+  assert.match(source, /<clef><sign>F<\/sign><line>4<\/line><\/clef>/);
+  assert.match(source, /<print new-system="yes"\/>/);
+  assert.match(source, /<words font-size="8" font-weight="bold">Am7\/C#<\/words>/);
+  assert.match(source, /<accidental>sharp<\/accidental>/);
 });

@@ -19,4 +19,6 @@ await writeFile(join(outputDir, 'server', 'midi-parser.js'), midiParserSource.re
 await cp(join(projectRoot, 'node_modules', 'midi-file', 'LICENSE.md'), join(outputDir, 'server', 'midi-file-LICENSE.md'));
 await cp(join(projectRoot, 'node_modules', 'signalsmith-stretch', 'SignalsmithStretch.mjs'), join(outputDir, 'client', 'signalsmith-stretch.mjs'));
 await cp(join(projectRoot, 'node_modules', 'pdf-lib', 'dist', 'pdf-lib.min.js'), join(outputDir, 'client', 'pdf-lib.min.js'));
+await cp(join(projectRoot, 'node_modules', 'verovio', 'dist', 'verovio.mjs'), join(outputDir, 'client', 'verovio.mjs'));
+await cp(join(projectRoot, 'node_modules', 'verovio', 'dist', 'verovio-module.mjs'), join(outputDir, 'client', 'verovio-module.mjs'));
 console.log(`Built ${outputDir}`);

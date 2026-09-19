@@ -204,7 +204,9 @@
       const result = offline
         ? await (await import('./chord-offline.js')).buildOfflineArrangement({ progression, bpm, pattern, title: titleInput.value.trim() })
         : await responseJson(response);
-      const pdf = offline ? new Blob([result.pdf], { type: 'application/pdf' }) : fromBase64(result.pdfBase64, 'application/pdf');
+      const pdf = result.pdfBase64
+        ? fromBase64(result.pdfBase64, 'application/pdf')
+        : new Blob([await (await import('./chord-engraver.js')).engraveChordPdf({ progression, bpm, pattern, title: titleInput.value.trim() })], { type: 'application/pdf' });
       if (!result.rightMidiBase64 || !result.leftMidiBase64) throw new Error('양손 MIDI를 받지 못했습니다. 다시 시도해 주세요.');
       const right = fromBase64(result.rightMidiBase64, 'audio/midi');
       const left = fromBase64(result.leftMidiBase64, 'audio/midi');
