@@ -3,7 +3,8 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { parseMidi } from 'midi-file';
 import * as pdfLib from 'pdf-lib';
-import { createMidiScorePdf, guessMidiKey, MidiScoreError, readMidiScore } from '../src/worker/midi-score.js';
+import { arrangeChords } from '../src/client/chord-offline.js';
+import { createChordScorePdf, createMidiScorePdf, guessMidiKey, MidiScoreError, readMidiScore } from '../src/worker/midi-score.js';
 
 test('hosted MIDI converter produces a downloadable score PDF', async () => {
   const bytes = new Uint8Array(await readFile(new URL('../src/client/assets/demo/Merry-go-round-right.mid', import.meta.url)));
@@ -19,4 +20,11 @@ test('hosted MIDI converter produces a downloadable score PDF', async () => {
 
 test('hosted MIDI converter rejects non-MIDI files', () => {
   assert.throws(() => readMidiScore(new Uint8Array([1, 2, 3]), parseMidi), error => error instanceof MidiScoreError && error.status === 415);
+});
+
+test('hosted chord generator produces a vector score PDF', async () => {
+  const bars = arrangeChords({ title: '연결 확인', progression: 'C | G | Am | F', pattern: 'hold', bpm: 120 });
+  const pdf = await createChordScorePdf(bars, '연결 확인', 120, pdfLib);
+  assert.deepEqual(Array.from(pdf.slice(0, 5)), [37, 80, 68, 70, 45]);
+  assert.equal((await pdfLib.PDFDocument.load(pdf)).getPageCount(), 1);
 });

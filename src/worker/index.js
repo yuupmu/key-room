@@ -1,10 +1,10 @@
 import * as pdfLib from './pdf-lib.esm.js';
 import parseMidi from './midi-parser.js';
 import { searchSong } from './song-search.js';
-import { arrangeChords } from './chord-offline.js';
+import { arrangeChords, chordMidi } from './chord-offline.js';
 import { ScoreProblem, finalizeReview, reviewScore, scoreToMidi } from './score.js';
 import { unfoldPdf } from './unfold.js';
-import { createMidiScorePdf, guessMidiKey, MidiScoreError, readMidiScore } from './midi-score.js';
+import { createChordScorePdf, createMidiScorePdf, guessMidiKey, MidiScoreError, readMidiScore } from './midi-score.js';
 
 const { PDFDocument } = pdfLib;
 
@@ -163,6 +163,17 @@ async function chordChart(request, env) {
   const reviewed = reviewChords(chart.progression);
   return reply({ ...chart, ...reviewed, warning: [chart.warning, reviewed.unknownCount ? `확인 필요한 코드 ${reviewed.unknownCount}곳을 ?로 표시했습니다.` : ''].filter(Boolean).join(' ') });
 }
+async function chordArrangement(request) {
+  check(request.method === 'POST', 'POST 요청만 지원합니다.', 405);
+  const options = JSON.parse(new TextDecoder().decode(await readBytes(request, 16000)));
+  let bars;
+  try { bars = arrangeChords(options); }
+  catch (error) { throw new ApiProblem(error?.message || '코드 입력을 확인해 주세요.'); }
+  const midi = chordMidi(bars, options.bpm);
+  const pdf = await createChordScorePdf(bars, options.title, options.bpm, pdfLib);
+  return reply({ ...midi, pdfBase64: base64(pdf), measureCount: bars.length, bpm: options.bpm,
+    summary: bars.map(bar => ({ measure: bar.number, chords: bar.chords })) });
+}
 async function songSearch(request, env) {
   check(request.method === 'POST', 'POST 요청만 지원합니다.', 405);
   check(env.OPENAI_API_KEY, '사이트에 OPENAI_API_KEY 비밀 설정이 필요합니다.', 503);
@@ -204,7 +215,7 @@ async function unfold(request, env) {
 export default {
   async fetch(request, env) {
     const pathname = new URL(request.url).pathname;
-    if (pathname === '/health') return reply({ status: 'ok', mode: 'sites', scoreApi: true, songSearchApi: true, unfoldScoreApi: true, midiScoreApi: true, apiKeyConfigured: !!env.OPENAI_API_KEY });
+    if (pathname === '/health') return reply({ status: 'ok', mode: 'sites', scoreApi: true, chordArrangementApi: true, songSearchApi: true, unfoldScoreApi: true, midiScoreApi: true, apiKeyConfigured: !!env.OPENAI_API_KEY });
     if (!pathname.startsWith('/api/')) return env.ASSETS ? env.ASSETS.fetch(request) : new Response('Not found', { status: 404 });
     if (!sameOrigin(request)) return reply({ error: '다른 사이트에서 보낸 요청은 허용하지 않습니다.' }, 403);
     try {
@@ -212,6 +223,7 @@ export default {
       if (pathname === '/api/score-to-midi/status') return await scoreStatus(request, env);
       if (pathname === '/api/score-to-midi/review') return await scoreReview(request);
       if (pathname === '/api/chord-chart') return await chordChart(request, env);
+      if (pathname === '/api/chord-arrangement') return await chordArrangement(request);
       if (pathname === '/api/song-search') return await songSearch(request, env);
       if (pathname === '/api/unfold-score') return await unfold(request, env);
       return reply({ error: '요청한 기능을 찾지 못했습니다.' }, 404);
